@@ -1,0 +1,175 @@
+export module containers
+
+import ranges // provides trait range_of, trait iterator_for, trait sentinel
+
+// would probably be builtin
+export enum order(equal=0, less=-1, greater=1)
+
+// __intN are special basic integer types that can be used within the compiler
+// for the implementations of these program-facing templates
+struct int(width : __int8) {}
+struct unsigned (width : __int8) {}
+
+struct add_carry_t(Rep : Type) {
+	carry : bool;
+	result : Rep;
+}
+
+// UB on overflow
+fn (+)(a : int($N1), b : int($N2)) -> int(max(N1, N2));
+fn (-)(a : int($N1), b : int($N2)) -> int(max(N1, N2));
+
+fn (*)(a : int($N1), b : int($N2)) -> int(N1 + N2);
+fn (/)(a : int($N1), b : int($N2)) -> int(N1);
+fn (%)(a : int($N1), b : int($N2)) -> int(N2);
+
+// No UB on overflow
+// Wrapping with carry-out (no information loss)
+fn (+?)(a : int($N1), b : int($N2)) -> add_carry_t(int(max(N1, N2)));
+fn (-?)(a : int($N1), b : int($N2)) -> add_carry_t(int(max(N1, N2)));
+// Wrapping, no carry-out
+fn (+%)(a : int($N1), b : int($N2)) -> int(max(N1, N2));
+fn (-%)(a : int($N1), b : int($N2)) -> int(max(N1, N2));
+
+
+// UB on overflow
+fn (+)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(max(N1, N2));
+fn (-)(a : unsigned($N1), b : unsigned($N2))
+	= error("a - b may have a negative result which cannot be represented in an\
+ unsigned type. Do you mean signed_diff(a, b) or wrap_diff(a, b)?");
+
+fn (*)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(2 * max(N1, N2));
+fn (/)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(N1);
+fn (%)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(N2);
+
+// No UB on overflow
+// Wrapping with carry-out (no information loss)
+fn (+?)(a : unsigned($N1), b : unsigned($N2)) -> add_carry_t(unsigned(max(N1, N2)));
+fn (-?)(a : unsigned($N1), b : unsigned($N2)) -> add_carry_t(unsigned(max(N1, N2)));
+// Wrapping, no carry-out
+fn (+%)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(max(N1, N2));
+fn (-%)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(max(N1, N2));
+
+
+struct float(exponent_w : __int, mantissa_w : __int, radix : __int = 2) {}
+
+
+// implement trait array for builtin sized arrays
+export fn begin(self : &[$Size]$) {
+	return array_iterator(self, 0)
+}
+export fn begin(self : &[]$) {
+	return array_iterator(self, 0)
+}
+export fn end(self : &[$Size]$) {
+	return array_iterator(self, Size)
+}
+export fn end(self : &[]$) {
+	return array_iterator(self, self.size)
+}
+
+// builtin arrays support this trait
+export trait array(Data : type) {
+	implements range_of(Data);
+	
+	fn size(self : &array) -> i64;
+	fn ([])(self : &array, i : i64) -> &Data;
+	
+	// Using a union type here doesn't mean the implementation must; this
+	// interface can be implemented by an overload set as well.
+	fn ([:])(
+			self : &array,
+			lb : (i64 | None), rb : (i64 | None))
+		-> range_of(Data);
+	
+	fn begin(self : &array) -> iterator_for(Data);
+	fn end(self : &array) -> sentinel;
+	
+	fn (==)(lhs : &array, rhs : &array) -> bool;
+	fn (<=>)(lhs : &array, rhs : &array) -> order;
+}
+
+export trait list(Data : type) {
+	// requires everything in trait array as well
+	implements array(Data);
+	
+	fn new() -> list;
+	fn new(other : &list) -> list;
+	fn new(arr :*[$Size : i64]Data) -> list;
+	
+	// these functions have no required return type
+	fn push_back(self : &mut list, val : Data);
+	fn append(self : &mut list, r : range_of(Data));
+	fn pop_back(self : &mut list) -> Data;
+}
+
+export struct vector(Data : Type) {
+	// completely unoptimized dynamic array implementation
+	let data : []Data {private mut}
+	
+	defer array(Data) to data;
+	
+	// assertions (no effect besides trait checking)
+	implements list(Data);
+	
+	public fn new() -> vector = default;
+	public fn new(other : &vector) -> vector = default;
+	public fn new(arr :*[$Size]Data) -> vector {
+		return vector{data : arr};
+	}
+	
+	public fn push_back(self : &mut vector, val : Data) {
+		self.data := {self.data..., val}
+	}
+	public fn append(self : &mut vector, r : range_of(Data)) {
+		self.data := {self.data..., r...}
+	}
+	public fn pop_back(self : &mut vector) -> Data {
+		let back = self[self.size - 1].move
+		let tmp : []Data [self.size - 1]
+		for (let i : range(self.size - 1)) {
+			tmp = self.data[i].move
+		}
+		self.data := tmp.move
+		return back
+	}
+}
+
+export struct string {
+	let chars : vector(u8) {public mut}
+	// defer a trait to a member, instead of using inheritance
+	defer list(u8) to chars;
+}
+
+export fn (+)(lhs : string, rhs : &string) -> string {
+	lhs.append(rhs)
+	return lhs
+}
+
+export fn icompare(lhs : &string, rhs : &string) -> order {
+	for (a, b) in zip(lhs, rhs) {
+		match(a.tolower <=> b.tolower) {
+			order::equal -> none,
+			(o)          -> return o
+		}
+	}
+	// _ is an implicit lambda parameter
+	// calls map(zip(lhs, rhs), _[0] <=> _[1])
+	return zip(lhs.tolower, rhs.tolower)
+	       |> map((<=>))
+	       |> filter(_ != order::equal)
+	       |> front_or(order::equal)
+	// Equivalent to:
+	return front_or(filter(map(zip(lhs.tolower, rhs.tolower),
+	                           (<=>)),
+	                       _ != order::equal),
+	                order::equal)
+}
+
+export struct Enum(Variants : [](#Name : Identifier, Attribute : Type = None)) {
+	enum tags { @(#Variants).Name... };
+	
+	data : union(
+			@(const id = @(#tags).Enumerators, value : @(#Variants).Attribute)...
+		) { public; private mut }
+}
