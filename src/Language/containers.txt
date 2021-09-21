@@ -6,7 +6,9 @@ import ranges // provides trait range_of, trait iterator_for, trait sentinel
 export enum order(equal=0, less=-1, greater=1)
 
 // __intN are special basic integer types that can be used within the compiler
-// for the implementations of these program-facing templates
+//  for the implementations of these program-facing templates
+// Note: Parameters to compile-time entities are automatically considered
+//  'const' without needing annotation
 struct int(width : __int8) {}
 struct unsigned (width : __int8) {}
 
@@ -53,6 +55,12 @@ fn (-%)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(max(N1, N2));
 
 struct float(exponent_w : __int, mantissa_w : __int, radix : __int = 2) {}
 
+fn alloc(const T : Type, args : $Args...) -> owner(T);
+fn alloc(const T : []Type, Count, args : $Args...) -> owner([]T);
+
+fn try_alloc(const T : Type, args : $Args...) -> ?owner(T);
+fn try_alloc(const T : []Type, Count, args : $Args...) -> ?owner([]T);
+
 
 // implement trait array for builtin sized arrays
 export fn begin(self : &[$Size]$) {
@@ -69,62 +77,61 @@ export fn end(self : &[]$) {
 }
 
 // builtin arrays support this trait
-export trait array(Data : type) {
+export trait array(Data : Type) {
 	implements range_of(Data);
 	
-	fn size(self : &array) -> i64;
-	fn ([])(self : &array, i : i64) -> &Data;
+	fn size(self : &This) -> i64;
+	fn ([])(self : &This, i : i64) -> &Data;
 	
 	// Using a union type here doesn't mean the implementation must; this
 	// interface can be implemented by an overload set as well.
 	fn ([:])(
-			self : &array,
-			lb : (i64 | None), rb : (i64 | None))
+			self : &This,
+			lb : ?i64, rb : ?i64)
 		-> range_of(Data);
 	
-	fn begin(self : &array) -> iterator_for(Data);
-	fn end(self : &array) -> sentinel;
+	fn begin(self : &This) -> iterator_for(Data);
+	fn end(self : &This) -> sentinel;
 	
-	fn (==)(lhs : &array, rhs : &array) -> bool;
-	fn (<=>)(lhs : &array, rhs : &array) -> order;
+	fn (==)(lhs : &This, rhs : &This) -> bool;
+	fn (<=>)(lhs : &This, rhs : &This) -> order;
 }
 
-export trait list(Data : type) {
+export trait list(Data : Type) {
 	// requires everything in trait array as well
 	implements array(Data);
 	
-	fn new() -> list;
-	fn new(other : &list) -> list;
-	fn new(arr :*[$Size : i64]Data) -> list;
+	fn new() -> This;
+	fn new(other : &This) -> This;
+	fn new(arr :*[$Size : i64]Data) -> This;
 	
 	// these functions have no required return type
-	fn push_back(self : &mut list, val : Data);
-	fn append(self : &mut list, r : range_of(Data));
-	fn pop_back(self : &mut list) -> Data;
+	fn push_back(self : &mut This, val : Data);
+	fn append(self : &mut This, r : range_of(Data));
+	fn pop_back(self : &mut This) -> Data;
 }
 
 export struct vector(Data : Type) {
 	// completely unoptimized dynamic array implementation
-	let data : []Data {private mut}
+	let data : *[]Data {private mut}
 	
 	defer array(Data) to data;
 	
 	// assertions (no effect besides trait checking)
 	implements list(Data);
 	
-	public fn new() -> vector = default;
-	public fn new(other : &vector) -> vector = default;
-	public fn new(arr :*[$Size]Data) -> vector {
-		return vector{data : arr};
-	}
+	public fn new() -> This = default;
+	public fn new(other : &This) -> This = default;
+	public fn new(arr :*[$Size]Data) -> This 
+		= This::new(data : arr);
 	
-	public fn push_back(self : &mut vector, val : Data) {
+	public fn push_back(self : &mut This, val : Data) {
 		self.data := {self.data..., val}
 	}
-	public fn append(self : &mut vector, r : range_of(Data)) {
+	public fn append(self : &mut This, r : range_of(Data)) {
 		self.data := {self.data..., r...}
 	}
-	public fn pop_back(self : &mut vector) -> Data {
+	public fn pop_back(self : &mut This) -> Data {
 		let back = self[self.size - 1].move
 		let tmp : []Data [self.size - 1]
 		for (let i : range(self.size - 1)) {
@@ -172,4 +179,297 @@ export struct Enum(Variants : [](#Name : Identifier, Attribute : Type = None)) {
 	data : union(
 			@(const id = @(#tags).Enumerators, value : @(#Variants).Attribute)...
 		) { public; private mut }
+}
+
+// I'm not quite sure what operators will be used for these operations
+trait Iterator(T : Type) {
+	fn deref(self : Iterator(T)) -> ?&T;
+	fn next(self  : Iterator(T)) -> Iterator(T);
+	fn prev(self  : Iterator(T)) -> Iterator(T);
+}
+
+struct list_node(T : Type) {
+	let data : T            {public mut};
+	let next : ?owner(This) {public, module mut};
+	let prev : ?&This       {public, module mut};
+	
+	public fn new = default;
+}
+
+struct linked_list(T : Type) {
+	alias Node = list_node(T);
+	alias List = linked_list(T);
+	
+	struct end_sentinel(Mut : bool) {
+		implements Iterator(T);
+		let list : &mut(Mut) List {module mut};
+		
+		public fn deref(self : This) = None;
+		public fn next(self : This) = None;
+		public fn prev(self : This) -> ?iterator(Mut)
+			= iterator::new(self.list, self.list.tail)?;
+
+		public fn new = default;
+		public fn end_sentinel(false)::new(other : &end_sentinel(true))
+			= end_sentinel(false)::new(other.list);
+	}
+	struct iterator(Mut : bool) {
+		implements Iterator(T);
+		let list : &mut(Mut) List {module mut};
+		let it   : &mut(Mut) Node {module mut};
+		
+		public fn deref(self : This) -> &T = it.data;
+		public fn next(self : This) -> iterator | end_sentinel
+			= This::new(self.list, self.it.next) ?? end_sentinel(Mut)::new(self.list);
+		public fn prev(self : This) -> ?iterator
+			= This::new(self.list, self.it.prev)?;
+
+		public fn new = default;
+		public fn iterator(false)::new(other : &iterator(true))
+			= iterator(false)::new(other.list, other.it);
+	}
+	
+	let head : ?owner(Node) {module mut};
+	let tail : ?&Node       {module mut};
+	
+	public fn new() -> This = {none, none};
+	
+	public fn begin(self : &This) -> Iterator(T)
+		= iterator(false)::new(self, self.head)
+			?? end_sentinel(false)::new(self);
+	public fn m_begin(self : &mut This) -> Iterator(T)
+		= iterator(true)::new(self, self.head)
+			?? end_sentinel(true)::new(self);
+	
+	public fn end(self : &This) = end_sentinel(false)::new(self);
+	public fn m_end(self : &mut This) = end_sentinel(true)::new(self);
+	
+	// I'm not sure about this syntax for casting/conversion
+	public fn is_empty(self : This) -> bool = bool(head);
+	
+	public fn size(self : &This) -> iSize {
+		fn sz(node : &Node, count : iSize) {
+			if node {
+				return #[tail] sz(node.next, count + 1);
+			} else {
+				return count;
+			}
+		}
+		return sz(self.head, 0);
+	}
+	
+	public fn insert_front(self : &mut This, data : T) -> None {
+		if self.head {
+			self.head := std::alloc(Node, consume(data), consume(self.head), none);
+			self.head.next.prev := self.head;
+		} else {
+			// empty list
+			self.tail := self.head := std::alloc(Node, consume(data), none, none);
+		}
+	}
+	public fn insert_back(self : &mut This, data : T) -> None {
+		if self.tail {
+			self.tail := self.tail.next := std::alloc(Node, consume(data), none, self.tail);
+		} else {
+			// empty list
+			self.tail := self.head := std::alloc(Node, consume(data), none, none);
+		}
+	}
+	
+	public fn insert(self : &mut This, data : T, pos : iterator($)) -> None {
+		assert(self == pos.list);
+		if pos.prev() {
+			let n = std::alloc(Node, consume(data), none, none);
+			n.next := consume(pos.prev.next);
+			n.prev := pos.prev;
+			
+			let N = n;
+			pos.prev.next := consume(n);
+			pos.prev = N;
+		} else {
+			insert_front(consume(data));
+			
+			n.next := consume(self.head);
+			pos.prev := n;
+			self.tail := self.head := consume(n);
+		}
+	}
+	public fn insert(self : &mut This, data : &T, _ : end_sentinel($)) -> None {
+		assert(self == pos.list);
+		self.insert_back(data);
+	}
+	
+	public fn erase(self : &mut This, pos : iterator($)) -> None {
+		assert(self == pos.list);
+		
+		let mut node : owner(Node);
+		if pos.prev {
+			node := consume(pos.prev.next)?;
+			pos.prev.next := consume(pos.next)?;
+		} else {
+			node := consume(self.head)?;
+			self.head := consume(node.next)?;
+		}
+		if node.next {
+			node.next.prev := node.prev;
+		} else {
+			self.tail := node.prev;
+		}
+	}
+	
+	public fn erase_front(self : &mut This) -> None {
+		if self.head {
+			node := consume(self.head)?;
+			self.head := consume(node.next)?;
+			if not self.head {
+				self.tail := none;
+			}
+		}
+	}
+	
+	public fn clear(self : &mut This) {
+		// RAII handles all cleanup
+		self.tail := none;
+		self.head := none;
+	}
+	
+	public fn merge(mut left : This, mut right : This, comp = (<)) -> This {
+		if right.is_empty {
+			// nothing to merge
+			return consume(left);
+		} else if left.is_empty() {
+			// left is empty, so just take the entirety of right
+			return consume(right)
+		} else {
+			// do an actual merge
+			
+			// clear out the objects
+			let mut a : ?owner(Node) = consume(left.head);
+			left.tail := none;
+			let mut b : ?owner(Node) = consume(right.head);
+			right.tail := none;
+			
+			// guided NRVO via attribute
+			let #[return] ret : This;
+			
+			// set up the first element
+			if (a.data.comp(b.data)) {
+				ret.head := consume(a);
+				a := consume(ret.head.next);
+				a.prev := none;
+			} else {
+				ret.head := consume(b);
+				b := consume(ret.head.next);
+				b.prev := none;
+			}
+			ret.tail := ret.head;
+			
+			// local function is an implicit closure (non-returnable)
+			fn append(n : &mut) {
+				ret.tail.next := consume(n);
+				n := consume(ret.tail.next.next);
+				ret.tail.next.prev := ret.tail;
+				ret.tail := ret.tail.next;
+			}
+			
+			// perform the merge
+			while a and b {
+				if (a.data.comp(b.data)) {
+					append(a);
+				} else {
+					append(b);
+				}
+			}
+			// clean up the remaining elements and ensure ret.tail is set
+			// only at most one of these can run
+			// (this could be optimized somewhat)
+			while a {
+				append(a);
+			}
+			while b {
+				append(b);
+			}
+		}
+		
+		// other functions provided by C++ std::list, may or may not fit in
+		// with this language's paradigms
+		public fn splice(self : &mut This, pos : iterator(false),
+		                 other : &mut This) -> None;
+		public fn splice(self : &mut This, pos : iterator(false),
+		                 other : &mut This, it : iterator(false)) -> None;
+		public fn splice(self : &mut This, pos : iterator(false),
+		                 other : &mut This, first : iterator(false),
+		                 last : iterator(false)) -> None;
+		
+		public fn remove(self : &mut This, value : &T) -> iSize;
+		public fn remove_if(self : &mut This, pred) -> iSize;
+		
+		public fn reverse(self : This) -> This;
+		
+		public fn unique(self : This, pred = (==)) -> This;
+		
+		public fn sort(self : This, comp = (<)) -> This
+	}
+}
+
+
+// old iterator design:
+
+struct iterator {
+	let type : enum(node, beg, end);
+	let it : &Node {module};
+	
+	// Some languages have &self.it?.data instead
+	fn deref(self : This) -> ?&T = &self.it.data?;
+	fn next(self : This) -> ?This
+		= match self.type {
+			node -> 
+				{node, self.it.next}
+				// if self.it.next is null, this constructor fails, so
+				// the ?? operator evaluates the next option
+				?? {end, self.it},
+			beg  -> {node, self.it},
+			// incrementing the end sentinel fails
+			end  -> none;
+		};
+	fn prev(self : This) -> ?This
+		= match self.type {
+			node -> 
+				{node, self.it.next}
+				// if self.it.next is null, this constructor fails, so
+				// the ?? operator evaluates the next option
+				?? {end, self.it},
+			// incrementing the end sentinel fails
+			beg  -> none;
+			end  -> {node, self.it},
+		};
+}
+struct mut_iterator {
+	let type : enum(node, beg, end);
+	let it : &mut Node;
+	
+	fn deref(self : &This) -> ?&mut T
+		= self.it.?;
+	fn next(self : &This) -> ?This
+		= match self.type {
+			node -> 
+				{node, self.it.next}
+				// if self.it.next is null, this constructor fails, so
+				// the ?? operator evaluates the next option
+				?? {end, self.it},
+			beg  -> {node, self.it},
+			// incrementing the end sentinel fails
+			end  -> none;
+		};
+	fn prev(self : &This) -> ?This
+		= match self.type {
+			node -> 
+				{node, self.it.prev}
+				// if self.it.prev is null, this constructor fails, so
+				// the ?? operator evaluates the next option
+				?? {beg, self.it},
+			// decrementing the beginning sentinel fails
+			beg  -> none;
+			end  -> {node, self.it},
+		};
 }
