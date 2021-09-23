@@ -3,7 +3,7 @@ export module containers
 import ranges // provides trait range_of, trait iterator_for, trait sentinel
 
 // would probably be builtin
-export enum order(equal=0, less=-1, greater=1)
+export enum order{equal=0, less=-1, greater=1}
 
 // __intN are special basic integer types that can be used within the compiler
 //  for the implementations of these program-facing templates
@@ -56,10 +56,10 @@ fn (-%)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(max(N1, N2));
 struct float(exponent_w : __int, mantissa_w : __int, radix : __int = 2) {}
 
 fn alloc(const T : Type, args : $Args...) -> owner(T);
-fn alloc(const T : []Type, Count, args : $Args...) -> owner([]T);
+fn alloc_array(const T : Type, Count, args : $Args...) -> owner([]T);
 
 fn try_alloc(const T : Type, args : $Args...) -> ?owner(T);
-fn try_alloc(const T : []Type, Count, args : $Args...) -> ?owner([]T);
+fn try_alloc_array(const T : Type, Count, args : $Args...) -> ?owner([]T);
 
 
 // implement trait array for builtin sized arrays
@@ -156,16 +156,16 @@ export fn (+)(lhs : string, rhs : &string) -> string {
 export fn icompare(lhs : &string, rhs : &string) -> order {
 	for (a, b) in zip(lhs, rhs) {
 		match(a.tolower <=> b.tolower) {
-			order::equal -> none,
-			(o)          -> return o
+			case order::equal -> none,
+			(o)               -> return o
 		}
 	}
 	// _ is an implicit lambda parameter
 	// calls map(zip(lhs, rhs), _[0] <=> _[1])
 	return zip(lhs.tolower, rhs.tolower)
-	       |> map((<=>))
-	       |> filter(_ != order::equal)
-	       |> front_or(order::equal)
+	       .map((<=>))
+	       .filter(_ != order::equal)
+	       .front_or(order::equal)
 	// Equivalent to:
 	return front_or(filter(map(zip(lhs.tolower, rhs.tolower),
 	                           (<=>)),
@@ -181,12 +181,31 @@ export struct Enum(Variants : [](#Name : Identifier, Attribute : Type = None)) {
 		) { public; private mut }
 }
 
+fn loop_demo(val, array : &[][]$T, cmp = (==)) {
+	// pos is an optional tuple with the position of the first found element
+	let pos = for:find row -> array.size {
+		for col -> array[row].size {
+			// break can carry a value, like return. This lets pos be constant
+			
+			break:find (row,col) if val.cmp(array[row][col])
+			
+			if val.cmp(array[row][col]) { break:find (row,col) }
+		}
+	}?
+	// do something with pos
+}
+
 // I'm not quite sure what operators will be used for these operations
 trait Iterator(T : Type) {
 	fn deref(self : Iterator(T)) -> ?&T;
 	fn next(self  : Iterator(T)) -> Iterator(T);
 	fn prev(self  : Iterator(T)) -> Iterator(T);
 }
+
+fn foldl(op, init : Type(!= None), iter : Iterator)
+	= #[tail] foldl(op, op(init, iter.deref)?, iter.next);
+fn foldr(op, init, iter : Iterator)
+	=         op(iter.deref, foldr(op, init, iter.next))?;
 
 struct list_node(T : Type) {
 	let data : T            {public mut};
@@ -413,7 +432,7 @@ struct linked_list(T : Type) {
 }
 
 
-// old iterator design:
+// old iterator design, kept just because it used some additional features (mostly involving optionals):
 
 struct iterator {
 	let type : enum(node, beg, end);
@@ -423,25 +442,25 @@ struct iterator {
 	fn deref(self : This) -> ?&T = &self.it.data?;
 	fn next(self : This) -> ?This
 		= match self.type {
-			node -> 
+			case node -> 
 				{node, self.it.next}
 				// if self.it.next is null, this constructor fails, so
 				// the ?? operator evaluates the next option
 				?? {end, self.it},
-			beg  -> {node, self.it},
+			case beg  -> {node, self.it},
 			// incrementing the end sentinel fails
-			end  -> none;
+			case end  -> none;
 		};
 	fn prev(self : This) -> ?This
 		= match self.type {
-			node -> 
+			case node -> 
 				{node, self.it.next}
 				// if self.it.next is null, this constructor fails, so
 				// the ?? operator evaluates the next option
 				?? {end, self.it},
 			// incrementing the end sentinel fails
-			beg  -> none;
-			end  -> {node, self.it},
+			case beg  -> none;
+			case end  -> {node, self.it},
 		};
 }
 struct mut_iterator {
@@ -452,24 +471,24 @@ struct mut_iterator {
 		= self.it.?;
 	fn next(self : &This) -> ?This
 		= match self.type {
-			node -> 
+			case node -> 
 				{node, self.it.next}
 				// if self.it.next is null, this constructor fails, so
 				// the ?? operator evaluates the next option
 				?? {end, self.it},
-			beg  -> {node, self.it},
+			case beg  -> {node, self.it},
 			// incrementing the end sentinel fails
-			end  -> none;
+			case end  -> none;
 		};
 	fn prev(self : &This) -> ?This
 		= match self.type {
-			node -> 
+			case node -> 
 				{node, self.it.prev}
 				// if self.it.prev is null, this constructor fails, so
 				// the ?? operator evaluates the next option
 				?? {beg, self.it},
 			// decrementing the beginning sentinel fails
-			beg  -> none;
-			end  -> {node, self.it},
+			case beg  -> none;
+			case end  -> {node, self.it},
 		};
 }

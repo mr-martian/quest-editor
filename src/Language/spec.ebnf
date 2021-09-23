@@ -1,0 +1,205 @@
+
+(* Syntax definition for --- *)
+
+module ::= module-definition [module-imports] { ['export'] declaration }
+
+module-definition ::= ['export'] 'module' module-name new-line
+module-name       ::= identifier
+module-imports    ::= {'import' module-name}
+
+declaration ::= fn-declaration
+              | struct-declaration
+			  | enum-definition
+			  | trait-definition
+			  | global-var-declaration
+
+fn-declaration ::= prototype (';' | fn-body)
+fn-body        ::= block | '=' expression ';' | '=' 'delete' [reason-expr] ';'
+prototype      ::= 'fn' fn-name argument-list [return-spec]
+anon-prototype ::= 'fn'         argument-list [return-spec]
+return-spec    ::= '->' type-constraint
+
+var-declaration ::= 'let' var-definition var-initializer
+                  | 'let' 'mut' var-definition [var-initializer]
+var-definition  ::= var-name [':' type-constraint]
+var-initializer ::= '=' expression | braced-initializer
+argument-list   ::= '(' {arg-definition [default-arg]} ')'
+arg-definition  ::= arg-name [':' arg-type-constraint]
+
+(* no mutable global variables *)
+global-var-declaration ::= 'let' var-definition var-initializer
+
+reason-expr ::= expression
+
+struct-declaration ::= 'struct' struct-name [argument-list] (';' | struct-body)
+struct-body   ::= '{' {struct-member} '}'
+struct-member ::= var-declaration access-specifier
+                | [access-key] fn-declaration
+                | [access-key] default-fn-definition
+				| 'defer' trait-id 'to' identifier new-line
+				| 'implements' trait-id new-line
+
+access-specifier ::= '{' (access-key [',' access-key2] ['mut']) '}'
+access-key       ::= 'public' | access-key2
+access-key2      ::= 'module' | 'private'
+
+default-fn-definition ::= [access-key] 'fn' default-fn-id '=' 'default' ';'
+default-fn-id         ::= 'new' [argument-list] [type-constraint]
+
+enum-definition ::= 'enum' enum-name '{' enumerator {',' enumerator} [','] '}'
+enumerator      ::= identifier ['=' expression]
+
+trait-definition ::= 'trait' trait-name argument-list '{' {trait-member} '}'
+trait-member     ::= prototype ';'
+                   | 'implements' trait-id new-line
+
+block      ::= '{' {statement} '}'
+statement  ::= expression new-line | var-declaration new-line | block
+             | struct-declaration
+(* TODO: sort out precedences *)
+expression ::= primary-expression
+             | assignment-expression
+			 | unary-expression
+			 | binary-expression
+			 | or-expression
+			 | rewrite-expression
+primary-expression ::= literal
+					 | id-expression
+			         | '(' expression ')'
+                     | call-expression
+					 | tuple-expression
+					 | subscript-expression
+					 | dot-expression
+					 | placeholder-id
+					 | lambda-expression
+					 | if-expression
+					 | match-expression
+					 | loop-expression
+					 | control-expression
+expression-list ::= | expression {',' expression}
+assignment-expression ::= expression ':=' expression
+binary-expression ::= expression binary-operator expression
+call-expression ::= primary-expression '(' expression-list ')'
+tuple-expression ::= '(' expression ',' expression-list ')'
+subscript-expression ::= primary-expression '[' expression-list ']'
+if-expression ::= 'if' expression block ['else' block]
+                | expression '?' expression ':' expression
+match-expression ::= 'match' expression '{'
+                     match-rule { ',' match-rule} [',' trivial-match]
+				   '}'
+match-rule ::= match-specifier '->' expression
+match-specifier ::= argument-list | 'case' primary-expression
+(* Local function can be either named or anonymous. Naming allows recursion. *)
+lambda-expression ::= (prototype | anon-prototype) fn-body
+
+(* All loops can be labeled, allowing for named multi-level break *)
+loop-expression ::=
+	'for' [':' label] for-loop-header block
+	(* while and do-while loops:
+	  while keepgoing() { go() }
+	  do { go() } until stop();
+	*)
+	| loop-constraint [':' label] expression block
+	| 'do' [':' label] block loop-constraint expression ';'
+	(* infinite loop:
+	loop {
+		go();
+		break if stop()
+		go();
+	}
+	*)
+	| 'loop' [':' label] block
+
+for-loop-header ::=
+	(* iteration:
+	  for i in range { print(i) }
+	*)
+	  var-definition 'in' expression
+	(* counting:
+	  //count 0 to 9
+	  for i = 0 -> 10        { print(i) }
+	  // count 10 to 1
+	  for i = 10 ; -1        { print(i) }
+	  // count -10 to 8 by 2s
+	  for i = -10 -> 10 ; +2 { print(i) }
+	*)
+	| loop-var-init ['->' expression]
+	  [';' ('+' | '-') integer-literal]
+	(* counting from 0:
+	  // count 0 to 9
+	  for i -> 10 { print(i) }
+	*)
+	| ['mut'] var-definition
+	  [';' ('+' | '-') integer-literal]
+	(* generalized for loop:
+	  for i = 10      while i > 1      ; i / 2    { print(i) }
+	  for i = begin() while i != end() ; i.next() { print(i) }
+	*)
+	| loop-var-init loop-constraint
+	  [';' expression]
+
+loop-constraint ::= 'while'
+				  (* equivalent to `while not`, maybe unnecessary *)
+                  | 'until'
+loop-var-init ::= ['mut'] var-definition '=' expression | '_'
+control-expression ::= 'return' [expression]
+					 | 'yield' [expression]
+(* idea: the value of a loop expression is the last expression evaluated, or else the value passed to the terminating break *)
+                     | 'break' [':' label] [expression] ['if' expression]
+(* conditional continue seems worse than conditional break but it would be weird if it was inconsistent *)
+					 | 'continue' [':' label] ['if' expression]
+list-comprehension ::= 
+
+dot-expression ::= expression '.' call-expression
+
+or-expression  ::= and-expression 'or' and-expression
+and-expression ::= primary-expression 'and' primary-expression
+
+binary-operator  ::= '+' | '-' | '*' | '/' | '%'
+                   | '+?' | '-?' | '+%' | '-%'
+                   | '==' | '!=' | '<' | '>' | '<=' | '>='
+				   | '&' | '|' | '^' 
+				   | '??'
+prefix-operator  ::= '-' | '+' | '~' | 'not' | '@' | '#'
+postfix-operator ::= '.' | '?'
+
+operator ::= binary-operator | prefix-operator | postfix-operator
+           | special-operator
+
+(**)
+
+type-constraint  ::= type-name
+				   | fn-name '(' {expression} ')'
+				   | struct-name '(' {type-constraint | value-constraint} ')'
+				   | trait-id
+				   | '[' ']' type-constraint
+				   | '[' value-constraint ']' type-constraint
+				   | '?' type-constraint
+				   | '&' type-constraint
+				   | '&' 'mut' type-constraint
+				   | '$' identifier
+				   | '$' '(' arg-definition ')'
+				   | empty
+value-constraint ::= constant-expression
+                   | '$' arg-definition
+type-name ::= builtin-type | struct-id
+struct-id ::= struct-name ['(' {expression} ')']
+builtin-type ::= 'float' | 'double' | 'bool' 
+               | '__int8' | '__int16' | '__int32' | '__int64'
+
+
+operator-id ::= '(' operator ')'
+fn-name     ::= identifier | operator-id
+struct-name ::= identifier
+trait-name  ::= identifier
+var-name    ::= identifier
+arg-name    ::= identifier
+
+attribute-list ::= '#[' attribute {',' attribute} ']'
+attribute ::= qualified-name ['(' expression-list ')']
+
+qualified-name ::= {namespace-id '::'} identifier
+
+new-line ::= '\n' | ';'
+empty    ::= 
+
