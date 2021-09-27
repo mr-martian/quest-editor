@@ -4,13 +4,14 @@ import ranges // provides trait range_of, trait iterator_for, trait sentinel
 
 // would probably be builtin
 export enum order{equal=0, less=-1, greater=1}
+alias None = ();
 
 // __intN are special basic integer types that can be used within the compiler
 //  for the implementations of these program-facing templates
 // Note: Parameters to compile-time entities are automatically considered
 //  'const' without needing annotation
-struct int(width : __int8) {}
-struct unsigned (width : __int8) {}
+struct int(width : __int32) {}
+struct unsigned (width : __int32) {}
 
 struct add_carry_t(Rep : Type) {
 	carry : bool;
@@ -53,7 +54,57 @@ fn (+%)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(max(N1, N2));
 fn (-%)(a : unsigned($N1), b : unsigned($N2)) -> unsigned(max(N1, N2));
 
 
-struct float(exponent_w : __int, mantissa_w : __int, radix : __int = 2) {}
+struct float(exponent_w : __int32, mantissa_w : __int32, radix : __int32 = 2) {}
+// The unary prefix ? operator returns a union of its input type and None
+fn (?_)(const T : Type) -> Type = T | None;
+// The binary | operator returns a union of its input types
+fn (|)(const T : Type, const U : Type) -> Type
+	= union(unique_unsorted(T, U)...);
+// A | A -> A
+fn (|)(const T : Type, const _ == T) -> Type
+	= T;
+// Chaining A | B | C... is flattened
+//! Review syntax
+fn (|)(const _ == union($T...), const U : Type) -> Type
+	= union(unique_unsorted(T..., U)...);
+fn (|)(const T : Type, const _ == union($U...)) -> Type
+	= union(unique_unsorted(T, U...)...);
+fn (|)(const _ == union($T...), const _ == union($U...)) -> Type
+	= union(unique_unsorted(T..., U...)...);
+// The type Noreturn is always erased from unions unless it is the only alternative
+fn (|)(const _ == Noreturn, const U :  Type    ) -> Type = U;
+fn (|)(const T :  Type,     const _ == Noreturn) -> Type = T;
+fn (|)(const _ == Noreturn, const _ == Noreturn) -> Type = Noreturn;
+
+fn unique_unsorted(, cmp = (==)) {
+}
+
+struct union(const T : Type, const U... : Type)
+	= map(__union, unique_unsorted(T, U...));
+
+/**
+ * A = i32
+ * B = None
+ * C = Noreturn
+ * D = (float | None)
+ * 
+ * T = A | B | C | D
+ *   = i32 | None | Noreturn | (float | None)
+ *   = ((i32 | None) | Noreturn) | (float | None)
+ *   = (union(i32, None) | Noreturn) | (float | None)
+ *   = ((|)(union(i32, None), Noreturn) | (float | None)
+ *   = union(i32, None) | (float | None)
+ *   = union(i32, None) | (|)(float, None)
+ *   = union(i32, None) | union(float, None)
+ *   = union(i32, None, float, None)
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ */
 
 fn alloc(const T : Type, args : $Args...) -> owner(T);
 fn alloc_array(const T : Type, Count, args : $Args...) -> owner([]T);
@@ -123,7 +174,7 @@ export struct vector(Data : Type) {
 	public fn new() -> This = default;
 	public fn new(other : &This) -> This = default;
 	public fn new(arr :*[$Size]Data) -> This 
-		= This::new(data : arr);
+		= new(data : arr);
 	
 	public fn push_back(self : &mut This, val : Data) {
 		self.data := {self.data..., val}
@@ -135,7 +186,7 @@ export struct vector(Data : Type) {
 		let back = self[self.size - 1].move
 		let tmp : []Data [self.size - 1]
 		for (let i : range(self.size - 1)) {
-			tmp = self.data[i].move
+			tmp[i] := self.data[i].move
 		}
 		self.data := tmp.move
 		return back
@@ -181,17 +232,15 @@ export struct Enum(Variants : [](#Name : Identifier, Attribute : Type = None)) {
 		) { public; private mut }
 }
 
-fn loop_demo(val, array : &[][]$T, cmp = (==)) {
+fn loop_demo(val, array : &[,]$T, cmp = (==)) {
 	// pos is an optional tuple with the position of the first found element
-	let pos = for:find row -> array.size {
-		for col -> array[row].size {
-			// break can carry a value, like return. This lets pos be constant
-			
-			break:find (row,col) if val.cmp(array[row][col])
-			
-			if val.cmp(array[row][col]) { break:find (row,col) }
+	// 'for:L1' is a labeled loop
+	let pos = for:L1 row in range(array.size[0]) {
+		for col in range(array.size[1]) {
+			// break can carry a value, like return. This lets pos be constant			
+			break:L1 (row,col) if cmp(val, array[row, col])
 		}
-	}?
+	} // if no value is returned with a 'break', None is returned
 	// do something with pos
 }
 
@@ -202,7 +251,7 @@ trait Iterator(T : Type) {
 	fn prev(self  : Iterator(T)) -> Iterator(T);
 }
 
-fn foldl(op, init : Type(!= None), iter : Iterator)
+fn foldl(op, init != None, iter : Iterator)
 	= #[tail] foldl(op, op(init, iter.deref)?, iter.next);
 fn foldr(op, init, iter : Iterator)
 	=         op(iter.deref, foldr(op, init, iter.next))?;
@@ -239,9 +288,9 @@ struct linked_list(T : Type) {
 		
 		public fn deref(self : This) -> &T = it.data;
 		public fn next(self : This) -> iterator | end_sentinel
-			= This::new(self.list, self.it.next) ?? end_sentinel(Mut)::new(self.list);
+			= new(self.list, self.it.next) ?? end_sentinel(Mut)::new(self.list);
 		public fn prev(self : This) -> ?iterator
-			= This::new(self.list, self.it.prev)?;
+			= new(self.list, self.it.prev)?;
 
 		public fn new = default;
 		public fn iterator(false)::new(other : &iterator(true))
@@ -304,7 +353,7 @@ struct linked_list(T : Type) {
 			
 			let N = n;
 			pos.prev.next := consume(n);
-			pos.prev = N;
+			pos.prev := N;
 		} else {
 			insert_front(consume(data));
 			
@@ -394,19 +443,19 @@ struct linked_list(T : Type) {
 			// perform the merge
 			while a and b {
 				if (a.data.comp(b.data)) {
-					append(a);
+					append(&a);
 				} else {
-					append(b);
+					append(&b);
 				}
 			}
 			// clean up the remaining elements and ensure ret.tail is set
 			// only at most one of these can run
 			// (this could be optimized somewhat)
 			while a {
-				append(a);
+				append(&a);
 			}
 			while b {
-				append(b);
+				append(&b);
 			}
 		}
 		
@@ -427,7 +476,7 @@ struct linked_list(T : Type) {
 		
 		public fn unique(self : This, pred = (==)) -> This;
 		
-		public fn sort(self : This, comp = (<)) -> This
+		public fn sort(self : This, comp = (<)) -> This;
 	}
 }
 

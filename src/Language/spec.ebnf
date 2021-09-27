@@ -12,33 +12,39 @@ declaration ::= fn-declaration
 			  | enum-definition
 			  | trait-definition
 			  | global-var-declaration
+			  | alias-definition
 
-fn-declaration ::= prototype (';' | fn-body)
+fn-declaration ::= prototype fn-body
+                 | prototype ';'
 fn-body        ::= block | '=' expression ';' | '=' 'delete' [reason-expr] ';'
-prototype      ::= 'fn' fn-name argument-list [return-spec]
-anon-prototype ::= 'fn'         argument-list [return-spec]
+prototype      ::= fn-prologue fn-name argument-list [return-spec]
+anon-prototype ::= fn-prologue         argument-list [return-spec]
 return-spec    ::= '->' type-constraint
+fn-prologue    ::= ['extern' [string-literal]] ('fun' | 'proc')
 
-var-declaration ::= 'let' var-definition var-initializer
-                  | 'let' 'mut' var-definition [var-initializer]
+var-declaration ::= 'let' var-definition var-initializer ';'
+                  | 'let' 'mut' var-definition [var-initializer] ';'
 var-definition  ::= var-name [':' type-constraint]
 var-initializer ::= '=' expression | braced-initializer
 argument-list   ::= '(' {arg-definition [default-arg]} ')'
 arg-definition  ::= arg-name [':' arg-type-constraint]
 
 (* no mutable global variables *)
-global-var-declaration ::= 'let' var-definition var-initializer
+global-var-declaration ::= 'let' var-definition var-initializer ';'
 
-reason-expr ::= expression
+alias-definition ::= 'alias' identifier '=' type-id ';'
+
+reason-expr ::= string-literal
 
 struct-declaration ::= 'struct' struct-name [argument-list] (';' | struct-body)
 struct-body   ::= '{' {struct-member} '}'
-struct-member ::= var-declaration access-specifier
+struct-member ::= data-member-definition
                 | [access-key] fn-declaration
                 | [access-key] default-fn-definition
 				| 'defer' trait-id 'to' identifier new-line
 				| 'implements' trait-id new-line
-
+				| alias-definition
+data-member-definition ::= 'let' var-name ':' type-id access-specifier
 access-specifier ::= '{' (access-key [',' access-key2] ['mut']) '}'
 access-key       ::= 'public' | access-key2
 access-key2      ::= 'module' | 'private'
@@ -63,9 +69,26 @@ expression ::= primary-expression
 			 | binary-expression
 			 | or-expression
 			 | rewrite-expression
+
+expression ::= assignment-expression | control-expression
+assignment-expression ::= and-expression ':=' assignment-expression
+control-expression ::= loop-expression
+                     | if-expression
+                     | match-expression
+                     | result-expression
+                     | 
+					 | 'continue' [label]
+result-expression  ::= 'result' [label] [expression]
+					 | 'yield' [label] [expression]
+                     | 'return' [expression]
+                     | 'break' [label]
+                     | 'end' [label]
+
+
 primary-expression ::= literal
 					 | id-expression
 			         | '(' expression ')'
+					 | tuple-expression
                      | call-expression
 					 | tuple-expression
 					 | subscript-expression
@@ -80,10 +103,12 @@ expression-list ::= | expression {',' expression}
 assignment-expression ::= expression ':=' expression
 binary-expression ::= expression binary-operator expression
 call-expression ::= primary-expression '(' expression-list ')'
-tuple-expression ::= '(' expression ',' expression-list ')'
 subscript-expression ::= primary-expression '[' expression-list ']'
-if-expression ::= 'if' expression block ['else' block]
+
+if-expression ::= 'if' expression block ['else' (block | if-expression)]
                 | expression '?' expression ':' expression
+inverted-if-expression ::= expression 'if' expression ['else' expression]
+
 match-expression ::= 'match' expression '{'
                      match-rule { ',' match-rule} [',' trivial-match]
 				   '}'
@@ -91,24 +116,27 @@ match-rule ::= match-specifier '->' expression
 match-specifier ::= argument-list | 'case' primary-expression
 (* Local function can be either named or anonymous. Naming allows recursion. *)
 lambda-expression ::= (prototype | anon-prototype) fn-body
-
+tuple-expression ::= '(' expression (',' | {',' expression} [','] ) ')'
+                   | '(' ')'
 (* All loops can be labeled, allowing for named multi-level break *)
 loop-expression ::=
-	'for' [':' label] for-loop-header block
+    (* See below for examples *)
+	'for' [label] for-loop-header block ['else' expression]
 	(* while and do-while loops:
 	  while keepgoing() { go() }
 	  do { go() } until stop();
 	*)
-	| loop-constraint [':' label] expression block
-	| 'do' [':' label] block loop-constraint expression ';'
+	| loop-constraint [label] expression block ['else' expression]
+	| 'do' [label] block loop-constraint expression (';' | ['else' expression])
 	(* infinite loop:
-	loop {
+	  loop {
 		go();
 		break if stop()
 		go();
 	}
+	  'loop' loops have no else because they have no condition that can be false
 	*)
-	| 'loop' [':' label] block
+	| 'loop' [label] block
 
 for-loop-header ::=
 	(* iteration:
@@ -139,15 +167,11 @@ for-loop-header ::=
 	  [';' expression]
 
 loop-constraint ::= 'while'
-				  (* equivalent to `while not`, maybe unnecessary *)
+				  (* equivalent to `while not` *)
                   | 'until'
 loop-var-init ::= ['mut'] var-definition '=' expression | '_'
-control-expression ::= 'return' [expression]
-					 | 'yield' [expression]
-(* idea: the value of a loop expression is the last expression evaluated, or else the value passed to the terminating break *)
-                     | 'break' [':' label] [expression] ['if' expression]
-(* conditional continue seems worse than conditional break but it would be weird if it was inconsistent *)
-					 | 'continue' [':' label] ['if' expression]
+label ::= ':' identifier
+        | ':' ('for' | 'while' | 'do' | 'loop')
 list-comprehension ::= 
 
 dot-expression ::= expression '.' call-expression
@@ -161,7 +185,7 @@ binary-operator  ::= '+' | '-' | '*' | '/' | '%'
 				   | '&' | '|' | '^' 
 				   | '??'
 prefix-operator  ::= '-' | '+' | '~' | 'not' | '@' | '#'
-postfix-operator ::= '.' | '?'
+postfix-operator ::= '^' | '?'
 
 operator ::= binary-operator | prefix-operator | postfix-operator
            | special-operator
@@ -174,18 +198,23 @@ type-constraint  ::= type-name
 				   | trait-id
 				   | '[' ']' type-constraint
 				   | '[' value-constraint ']' type-constraint
-				   | '?' type-constraint
+				   | '*' '"C"' type-constraint
+				   | '*' '"C"' 'mut' type-constraint
 				   | '&' type-constraint
 				   | '&' 'mut' type-constraint
+				   | '?' type-constraint
+				   | '(' [type-constraint {',' type-constraint} [',']] ')'
+				   | type-constraint {'|' type-constraint}
 				   | '$' identifier
-				   | '$' '(' arg-definition ')'
+				   | '(' '$' arg-definition ')'
 				   | empty
 value-constraint ::= constant-expression
                    | '$' arg-definition
 type-name ::= builtin-type | struct-id
 struct-id ::= struct-name ['(' {expression} ')']
 builtin-type ::= 'float' | 'double' | 'bool' 
-               | '__int8' | '__int16' | '__int32' | '__int64'
+               | 'Type' | 'Noreturn' | 'This'
+			   | '__int8' | '__int16' | '__int32' | '__int64'
 
 
 operator-id ::= '(' operator ')'
@@ -203,3 +232,4 @@ qualified-name ::= {namespace-id '::'} identifier
 new-line ::= '\n' | ';'
 empty    ::= 
 
+keyword ::= 'None' | 'Noreturn' | 'This' | 'Type' | 'alias' | 'and' | 'bool' | 'break' | 'continue' | 'defer' | 'delete' | 'do' | 'double' | 'else' | 'end' | 'enum' | 'export' | 'fail' | 'float' | 'fn' | 'for' | 'if' | 'implements' | 'import' | 'int' | 'let' | 'loop' | 'module' | 'mut' | 'or' | 'private' | 'proc' | 'public' | 'result' | 'return' | 'struct' | 'trait' | 'until' | 'while' | 'yield' | '__[[:alnum:]_]*'
