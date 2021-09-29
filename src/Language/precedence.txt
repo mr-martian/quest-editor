@@ -1,0 +1,74 @@
+Operators by precedence:
+    0:  a::b, a.b               id-expression               L
+    1:  (a), fn() = ;, fn(){}	primary-expression			*
+	17: match a {}, 			match-expression
+	18: if a {},
+		if a {} else b {},		if-expression				R
+	19: for/while/do/loop		loop-expression             L
+    2:  a(b), a[b], a...,
+        a^,                     postfix-expression          L
+    3:  +a, -a, ~a,
+        &a, &mut a,             prefix-expression           R
+    4:  a*b, a/b, a%b           multiplication-expression   L
+    5:  a+b, a-b, a+?b, a-?b,
+        a+%b, a-%b,             additive-expression         L
+    6:  a<<b, a>>b,             bitshift-expression         L
+    7:  a&b                     bitwise-and                 L
+    8:  a|b, a^b                bitwise-or                  L
+	9:  not a
+    10: ==, !=, <=>, <, <=, >,
+		>=	    				comparison-expression       *
+    11: and                     and-expression              L
+    12: or                      or-expression               L
+    13: ??                      null-coalescing-expression  R
+    14: a ? b : c, a ?: b       conditional-expression      R
+    15: a, b                    expression-list             L
+	16: return a, yield a,
+		break a, continue		exit-expression				L
+	20: a if b else c			inverted-if-expression		R
+	
+    99: a := b                  assignment-statement        R (not an expression)
+
+
+Keywords:
+	None
+	Noreturn
+	This
+	Type
+	__.*
+	alias
+	and
+	bool
+	break
+	continue
+	defer
+	delete
+	do
+	double
+	else
+	end
+	enum
+	export
+	fail
+	float
+	fn
+	for
+	if
+	implements
+	import
+	int
+	let
+	loop
+	module
+	mut
+	or
+	private
+	proc
+	public
+	result
+	return
+	struct
+	trait
+	until
+	while
+	yield

@@ -1,5 +1,5 @@
 
-(* Syntax definition for --- *)
+(* Syntax definition for Vellum *)
 
 module ::= module-definition [module-imports] { ['export'] declaration }
 
@@ -110,10 +110,12 @@ if-expression ::= 'if' expression block ['else' (block | if-expression)]
 inverted-if-expression ::= expression 'if' expression ['else' expression]
 
 match-expression ::= 'match' expression '{'
-                     match-rule { ',' match-rule} [',' trivial-match]
+                     match-rule { ',' match-rule} [',' [trivial-match]]
 				   '}'
-match-rule ::= match-specifier '->' expression
-match-specifier ::= argument-list | 'case' primary-expression
+match-rule ::= match-specifier '->' (expression | block)
+match-specifier ::= argument-list | case-specifier
+(* can stack cases *)
+case-specifier ::= 'case' primary-expression [case-specifier]
 (* Local function can be either named or anonymous. Naming allows recursion. *)
 lambda-expression ::= (prototype | anon-prototype) fn-body
 tuple-expression ::= '(' expression (',' | {',' expression} [','] ) ')'
@@ -181,7 +183,7 @@ and-expression ::= primary-expression 'and' primary-expression
 
 binary-operator  ::= '+' | '-' | '*' | '/' | '%'
                    | '+?' | '-?' | '+%' | '-%'
-                   | '==' | '!=' | '<' | '>' | '<=' | '>='
+                   | '==' | '!=' | '<=>' | '<' | '>' | '<=' | '>='
 				   | '&' | '|' | '^' 
 				   | '??'
 prefix-operator  ::= '-' | '+' | '~' | 'not' | '@' | '#'

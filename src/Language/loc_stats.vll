@@ -1,0 +1,98 @@
+module loc_stats;
+
+struct counters {
+	let histogram : []i32 {public, private mut};
+	let count     : i32   {public, private mut};
+	
+	proc add(self : &mut This, len) {
+		if len > histogram.size {
+			self.histogram := self.histogram.expand(len);
+		}
+		self.histogram[len] := self.histogram[len] + 1;
+		self.count := self.count + 1;
+	}
+}
+
+proc count(input, c : counters, tab_width) -> counters, c {
+	for raw_line : str = input.getline while input.good ; input.getline {
+		let line = line.strip_trailing_whitespace;
+		let mut len = 0;
+		for ch in line.chars {
+			if ch == '\t' {
+				len := len + tab_width - len % tab_width;
+			} else {
+				len := len + 1;
+			}
+		}
+		c.add(len);
+	}
+	return c;
+}
+
+struct report {
+	let data : counters {public, private mut};
+	let cdf : []i32 {private mut};
+	let average : f64 {public, private mut};
+	fn blanks(self : &This) -> i32 = self.counters.histogram[0];
+	fn pctile(self : &This, pct : f64) -> i32 {
+		let target = self.data.count * pct;
+		let mut running_total = 0;
+		for fr, pos in enumerate(self.cdf) {
+			running_total := running_total + f;
+			if running_total >= target {
+				return pos;
+			}
+		}
+		return self.cdf.size;
+	}
+	fn median(self : &This) -> i32 = self.pctile(.5);
+	fn range(self : &This) = cdf.size;
+	
+	fn new(data : counters) -> This {
+		let cdf = data.histogram.scan((+));
+		let range = data.histogram.size;
+		let total = data.count;
+		return report{consume data, consume cdf, total / range};
+	}
+}
+
+proc main(argv : []str) {
+	let mut files : []str;
+	let tab_width = proc(){
+		let mut tab_width = 8;
+		let mut next_arg : ?str;
+		for arg in argv {
+			if next_arg == "t" {
+				tab_width := arg.parse(i32);
+				next_arg := None;
+			} else if arg[0] == '-' and arg != "--" {
+				match arg {
+					case "-t"
+					case "--tab-width" -> {
+						next_arg := "t";
+					}, 
+				}
+			} else {
+				files.append(arg);
+			}
+		};
+		return tab_width;
+	}();
+	let mut c : counters;
+	for filename in files {
+		c := count(fopen(filename), c, tab_width)
+			?? die("could not open file {}".format(filename));
+	};
+	let r = report::new(consume c);
+	// TODO: display histogram
+	//draw_graph(r);
+	print("{} files read, {} LOC total (+ {} blanks)\n".format(
+		files.size,r.data.count - r.data.histogram[0], r.data.histogram[0]));
+	print("Maximum line length: {}\n".format(r.range));
+	print("Average line length: {}\n".format(r.average));
+	print("Median line length:  {}\n".format(r.pctile(.5)));
+	print("25th %ile: {}, 75th %ile: {}\n".format(
+		r.pctile(.25), r.pctile(.75)));
+	print("90th %ile: {}, 95th %ile: {}, 99th %ile: {}\n".format(
+		r.pctile(.9), r.pctile(.95), r.pctile(.99)));
+}
