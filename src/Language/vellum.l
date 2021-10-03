@@ -63,6 +63,8 @@
 "until"
 "while"
 "yield"
+"_"
+"_[A-Z]\w*"
 "__\w*"
 
 \w+

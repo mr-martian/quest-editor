@@ -4,37 +4,242 @@ struct counters {
 	let histogram : []i32 {public, private mut};
 	let count     : i32   {public, private mut};
 	
-	proc add(self : &mut This, len) {
-		if len > histogram.size {
-			self.histogram := self.histogram.expand(len);
+	proc add(&mut self, len) {
+		let hist = &self.histogram;
+		if len > hist.size {
+			hist^ := hist.expand(len);
 		}
-		self.histogram[len] := self.histogram[len] + 1;
-		self.count := self.count + 1;
+		hist[len] += 1;
+		self.count += 1;
 	}
+	// The above function is compiled into (approx) the following Substrate code
+	// which can then be further analyzed, compiled, and/or interpreted
+	proc add_substrate(&mut self, len) -> None {
+		substrate {
+			// let hist = &self.histogram;
+			self histogram & (-> hist)
+			// if len > hist.size {
+			len hist size >
+			(&[]i32 -> &[]i32) {
+				// hist := hist.expand(len);
+				hist^ dup move len expand :=
+			// }
+			} ( -> ) { } rot3 if
+			// hist[len] += 1;
+			len [] dup move 1 + :=
+			// self.dount += 1;
+			count dup move 1 + :=
+		}
+	};
+	// But it could be written like this, which doesn't use a variable binding
+	proc add_substrate_novar(&mut self, len)
+		= (: self
+			dup histogram
+			dup
+			{
+				dup dup move len expand :=
+				// rot3 ::= (a b c -> b c a)
+			} {} rot3 size len > if
+			len [] dup move 1 + :=
+			count dup move 1 + :=
+		:);
+	// The following code details exactly how the 'notional tuple' evolves
+	// during the processing of the above code
+	proc add_substrate_commented(&mut self, len)
+		= (: self
+			// (self)
+			dup histogram
+			// (self self,histogram)
+			// abbreviating (self self.histogram) as (self s.h)
+			(&[]i32 -> &[]i32) {
+				// (... s.h)
+					dup
+				// (... s.h s.h)
+					dup
+				// (... s.h s.h s.h)
+					move
+				// (... s.h s.h _H0)
+					len
+				// (... s.h s.h _H0 len)
+					expand
+				// (... s.h s.h _H1)
+					:=
+				// (... s.h)
+			}
+			// (self s.h {...})
+			dup2
+			// (self s.h {...} s.h)
+			size
+			// (self s.h {...} size)
+			len
+			// (self s.h {...} size len)
+			(>)
+			// (self s.h {...} _B)
+			( -> ) {}
+			// (self s.h {...} _B {})
+			swap
+			// (self s.h {...} {} _B)
+			if
+				// type check:
+				//   (... &[]i32) (&[]i32 -> &[]i32) -> (... &[]i32)
+				//   (... &[]i32) ( -> )             -> (... &[]i32)
+				// check passed
+			// (self s.h)
+			len
+			// (self s.h len)
+			([])
+			// (self s.h[l])
+			dup
+			// (self s.h[l] s.h[l])
+			move
+			// (self s.h[l] _L0)
+			1
+			// (self s.h[l] _L0 1)
+			(+)
+			// (self s.h[l] _L1)
+			:=
+			// (self)
+			count
+			// (self.count)
+			dup
+			// (self.count self.count)
+			move
+			// (self.count _C0)
+			1
+			// (self.count _C0 1)
+			(+)
+			// (self.count _C1)
+			:=
+			// ()
+		:);
 }
 
-proc count(input, c : counters, tab_width) -> counters, c {
+proc count(input, mut c : counters, tab_width) -> counters, c {
 	for raw_line : str = input.getline while input.good ; input.getline {
-		let line = line.strip_trailing_whitespace;
+		let line = raw_line.strip_trailing_whitespace;
 		let mut len = 0;
 		for ch in line.chars {
 			if ch == '\t' {
 				len := len + tab_width - len % tab_width;
 			} else {
-				len := len + 1;
+				len += 1;
 			}
 		}
 		c.add(len);
 	}
 	return c;
 }
+proc count_desugared(input, mut c : counters, tab_width) -> counters, c {
+	for raw_line : str = input.getline while input.good ; input.getline {
+		let line = raw_line.strip_trailing_whitespace;
+		let mut len = 0;
+		//for ch in line.chars {
+		for _v = (line.chars.begin, line.chars.end)
+			while _v[0] != _v[1]
+			; (_v[0].next, _v[1])
+		{
+			let ch = _v[0]^;
+			if ch == '\t' {
+				len := len + tab_width - len % tab_width;
+			} else {
+				len += 1;
+			}
+		} else None;
+		c.add(len);
+	}
+	return c;
+}
+proc count_desugared2(input, mut c : counters, tab_width) -> counters, c {
+	//for raw_line : str = input.getline while input.good ; input.getline {
+	input.getline |> proc& _L1(raw_line : str) -> None {
+		if input.good {
+			let line = raw_line.strip_trailing_whitespace;
+			let mut len = 0;
+			// for _v = (line.chars.begin, line.chars.end)
+			// 	while _v[0] != _v[1]
+			// 	do (_v[0].next, _v[1])
+			let _End = line.chars.end;
+			(line.chars.begin) |> proc& _L2(_V : str::char_iterator) -> None {
+				if _V != _End {
+					let ch = _V^;
+					if ch == '\t' {
+						len := len + tab_width - len % tab_width;
+					} else {
+						len += 1;
+					}
+					
+					return #[tail/cc] _L2(_V.next);
+				} else { return None };
+			}();
+			consume _End;
+			c.add(len);
+			
+			return #[tail/cc] _L1(input.getline);
+		} else { return None };
+	}();
+	
+	return c;
+}
+proc count_substrate(input, mut c : counters, tab_width) -> counters, c {
+	substrate {
+		// input.getline |> proc& _L1(raw_line : str) -> None {
+		input.getline
+		proc& _L1(str -> None) {
+			// if input.good {
+			input good
+			{
+				// let line = line.strip_trailing_whitespace;
+				raw_line strip_trailing_whitespace (-> line)
+				// let mut len = 0;
+				0 (-> mut len)
+				// let _End = line.chars.end;
+				line chars dup end (-> _End)
+				// (line.chars.begin) |> proc& _L2(_V : str::char_iterator) -> None {
+				begin
+				proc& _L2(str::char_iterator -> None) {
+					(-> _V)
+					// if _V != _End {
+					{
+						// let ch = _V^;
+						_V ^ (-> ch)
+						// if ch == '\t'
+						ch '\t' ==
+						{
+							// len := len + tab_width - len % tab_width;
+							len len tab_width + len tab_width % - :=
+						} {
+							// len += 1;
+							len dup move 1 + :=
+						} rot3 if
+						// return #[tail/cc] _L2(_V.next);
+						_V next #[tail/cc] _L2 return
+					} { 
+						// } else { return None };
+						None return
+					} _V _End == not if
+				// }();
+				} swap call1 ;
+				// consume _End;
+				(<- _End)
+				// c.add(len);
+				c len add
+				// return #[tail/cc] _L1(input.getline);
+				input getline #[tail/cc] _L1 return
+			// } else { return None };
+			} { None return } rot3 if
+		// }();
+		} swap call1 ;
+		// return c;
+		c return
+	};
+}
 
 struct report {
 	let data : counters {public, private mut};
 	let cdf : []i32 {private mut};
 	let average : f64 {public, private mut};
-	fn blanks(self : &This) -> i32 = self.counters.histogram[0];
-	fn pctile(self : &This, pct : f64) -> i32 {
+	fn blanks(&self) -> i32 = self.counters.histogram[0];
+	fn pctile(&self, pct : f64) -> i32 {
 		let target = self.data.count * pct;
 		let mut running_total = 0;
 		for fr, pos in enumerate(self.cdf) {
@@ -45,14 +250,29 @@ struct report {
 		}
 		return self.cdf.size;
 	}
-	fn median(self : &This) -> i32 = self.pctile(.5);
-	fn range(self : &This) = cdf.size;
+	fn pctile_substrate(&self, pct : f64) -> i32 {
+		let target = self.data.count * pct;
+		let mut running_total = 0;
+		for fr, pos in enumerate(self.cdf) {
+			running_total := running_total + f;
+			if running_total >= target {
+				return pos;
+			}
+		}
+		return self.cdf.size;
+	}
+	fn median(&self) -> i32 = self.pctile(.5);
+	fn range(&self) = cdf.size;
 	
 	fn new(data : counters) -> This {
 		let cdf = data.histogram.scan((+));
 		let range = data.histogram.size;
 		let total = data.count;
-		return report{consume data, consume cdf, total / range};
+		return report{
+			data: consume data,
+			cdf: consume cdf,
+			average: total / range
+		};
 	}
 }
 
