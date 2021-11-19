@@ -21,13 +21,13 @@ prototype      ::= fn-prologue fn-name argument-list [return-spec]
 anon-prototype ::= fn-prologue         argument-list [return-spec]
 return-spec    ::= '->' type-constraint
 fn-prologue    ::= ['extern' [string-literal]] ('fun' | 'proc')
+argument-list   ::= '(' {arg-definition [default-arg]} ')'
+arg-definition  ::= arg-name [':' arg-type-constraint]
 
 var-declaration ::= 'let' var-definition var-initializer ';'
                   | 'let' 'mut' var-definition [var-initializer] ';'
 var-definition  ::= var-name [':' type-constraint]
 var-initializer ::= '=' expression | braced-initializer
-argument-list   ::= '(' {arg-definition [default-arg]} ')'
-arg-definition  ::= arg-name [':' arg-type-constraint]
 
 (* no mutable global variables *)
 global-var-declaration ::= 'let' var-definition var-initializer ';'
@@ -79,7 +79,7 @@ control-expression ::= loop-expression
                      | 
 					 | 'continue' [label]
 result-expression  ::= 'result' [label] [expression]
-					 | 'yield' [label] [expression]
+                     | 'yield' [label] [expression]
                      | 'return' [expression]
                      | 'break' [label]
                      | 'end' [label]
@@ -122,7 +122,7 @@ tuple-expression ::= '(' expression (',' | {',' expression} [','] ) ')'
                    | '(' ')'
 (* All loops can be labeled, allowing for named multi-level break *)
 loop-expression ::=
-    (* See below for examples *)
+	(* See below for examples *)
 	'for' [label] for-loop-header block ['else' expression]
 	(* while and do-while loops:
 	  while keepgoing() { go() }
@@ -132,10 +132,10 @@ loop-expression ::=
 	| 'do' [label] block loop-constraint expression (';' | ['else' expression])
 	(* infinite loop:
 	  loop {
-		go();
-		break if stop()
-		go();
-	}
+	    go();
+	    break if stop()
+	    go();
+	  }
 	  'loop' loops have no else because they have no condition that can be false
 	*)
 	| 'loop' [label] block
@@ -154,13 +154,13 @@ for-loop-header ::=
 	  for i = -10 -> 10 ; +2 { print(i) }
 	*)
 	| loop-var-init ['->' expression]
-	  [';' ('+' | '-') integer-literal]
+	  [';' ('+' | '-' | ) integer-literal]
 	(* counting from 0:
 	  // count 0 to 9
 	  for i -> 10 { print(i) }
 	*)
 	| ['mut'] var-definition
-	  [';' ('+' | '-') integer-literal]
+	  [';' ('+' | '-' | ) integer-literal]
 	(* generalized for loop:
 	  for i = 10      while i > 1      ; i / 2    { print(i) }
 	  for i = begin() while i != end() ; i.next() { print(i) }
@@ -169,7 +169,7 @@ for-loop-header ::=
 	  [';' expression]
 
 loop-constraint ::= 'while'
-				  (* equivalent to `while not` *)
+                  (* equivalent to `while not` *)
                   | 'until'
 loop-var-init ::= ['mut'] var-definition '=' expression | '_'
 label ::= ':' identifier
@@ -214,9 +214,10 @@ value-constraint ::= constant-expression
                    | '$' arg-definition
 type-name ::= builtin-type | struct-id
 struct-id ::= struct-name ['(' {expression} ')']
-builtin-type ::= 'float' | 'double' | 'bool' 
+builtin-type ::= 'Float32' | 'Float64' | 'Bool' 
                | 'Type' | 'Noreturn' | 'This'
 			   | '__int8' | '__int16' | '__int32' | '__int64'
+			   | '__uint8' | '__uint16' | '__uint32' | '__uint64'
 
 
 operator-id ::= '(' operator ')'
@@ -234,4 +235,4 @@ qualified-name ::= {namespace-id '::'} identifier
 new-line ::= '\n' | ';'
 empty    ::= 
 
-keyword ::= 'None' | 'Noreturn' | 'This' | 'Type' | 'alias' | 'and' | 'bool' | 'break' | 'continue' | 'defer' | 'delete' | 'do' | 'double' | 'else' | 'end' | 'enum' | 'export' | 'fail' | 'float' | 'fn' | 'for' | 'if' | 'implements' | 'import' | 'int' | 'let' | 'loop' | 'module' | 'mut' | 'or' | 'private' | 'proc' | 'public' | 'result' | 'return' | 'struct' | 'trait' | 'until' | 'while' | 'yield' | '__[[:alnum:]_]*'
+keyword ::= 'None' | 'Noreturn' | 'This' | 'Type' | 'alias' | 'and' | 'Bool' | 'break' | 'continue' | 'defer' | 'delete' | 'do' | 'else' | 'end' | 'enum' | 'export' | 'Fail' | 'Float' | 'Float32' | 'Float64' | 'fn' | 'for' | 'if' | 'implements' | 'import' | 'Int' | 'Unsigned' | 'let' | 'loop' | 'module' | 'mut' | 'or' | 'private' | 'proc' | 'public' | 'result' | 'return' | 'struct' | 'trait' | 'unless' | 'until' | 'while' | 'yield' | '__[[:alnum:]_]*'

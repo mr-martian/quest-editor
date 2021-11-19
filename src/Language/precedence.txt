@@ -15,17 +15,18 @@ Operators by precedence:
     6:  a<<b, a>>b,             bitshift-expression         	L
     7:  a&b                     bitwise-and                 	L
     8:  a|b, a^b                bitwise-or                  	L
-	9:  not a
+    9:  not a
     10: ==, !=, <=>, <, <=, >,
 	>=			comparison-expression       	*
     11: and                     and-expression              	L
     12: or                      or-expression               	L
     13: ??                      null-coalescing-expression  	R
+    ??: |>			rewrite-expression		R
     14: a ? b : c, a ?: b       conditional-expression      	R
     15: a, b                    expression-list             	L
     16: return a, yield a,
-	break a, continue		exit-expression					L
-    20: a if b else c		inverted-if-expression		R
+	break a, continue	exit-expression             	L
+    20: a if b else c		inverted-if-expression	    	R
 	
     99: a := b                  assignment-statement        	R
 	(not an expression)
@@ -70,6 +71,8 @@ Keywords:
 	return
 	struct
 	trait
+	unless
+	unsigned
 	until
 	while
 	yield

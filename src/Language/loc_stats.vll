@@ -134,17 +134,20 @@ proc count_desugared(input, mut c : counters, tab_width) -> counters, c {
 		let line = raw_line.strip_trailing_whitespace;
 		let mut len = 0;
 		//for ch in line.chars {
-		for _v = (line.chars.begin, line.chars.end)
-			while _v[0] != _v[1]
-			; (_v[0].next, _v[1])
+		let _End = line.chars.end;
+		for _V = line.chars.begin;
+			while _V != _End
+			; _V.next
 		{
-			let ch = _v[0]^;
+			let ch = _V^;
 			if ch == '\t' {
 				len := len + tab_width - len % tab_width;
 			} else {
 				len += 1;
 			}
 		} else None;
+		consume _End;
+		//}
 		c.add(len);
 	}
 	return c;
@@ -157,7 +160,7 @@ proc count_desugared2(input, mut c : counters, tab_width) -> counters, c {
 			let mut len = 0;
 			// for _v = (line.chars.begin, line.chars.end)
 			// 	while _v[0] != _v[1]
-			// 	do (_v[0].next, _v[1])
+			// 	do (_v[0].next, _v[1]) {
 			let _End = line.chars.end;
 			(line.chars.begin) |> proc& _L2(_V : str::char_iterator) -> None {
 				if _V != _End {
@@ -172,12 +175,13 @@ proc count_desugared2(input, mut c : counters, tab_width) -> counters, c {
 				} else { return None };
 			}();
 			consume _End;
+			//}
 			c.add(len);
 			
 			return #[tail/cc] _L1(input.getline);
 		} else { return None };
 	}();
-	
+	//}
 	return c;
 }
 proc count_substrate(input, mut c : counters, tab_width) -> counters, c {
@@ -276,7 +280,7 @@ struct report {
 	}
 }
 
-proc main(argv : []str) {
+proc main(argv : []str, stdio) {
 	let mut files : []str;
 	let tab_width = proc(){
 		let mut tab_width = 8;
@@ -306,6 +310,7 @@ proc main(argv : []str) {
 	let r = report::new(consume c);
 	// TODO: display histogram
 	//draw_graph(r);
+	let print = stdio.out.print; 
 	print("{} files read, {} LOC total (+ {} blanks)\n".format(
 		files.size,r.data.count - r.data.histogram[0], r.data.histogram[0]));
 	print("Maximum line length: {}\n".format(r.range));

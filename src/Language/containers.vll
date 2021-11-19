@@ -112,6 +112,24 @@ fn alloc_array(const T : Type, Count, args : $Args...) -> owner([]T);
 fn try_alloc(const T : Type, args : $Args...) -> ?owner(T);
 fn try_alloc_array(const T : Type, Count, args : $Args...) -> ?owner([]T);
 
+// typeof is simply a macro instead of an operator, requiring no magic
+fn typeof(#_ : $T) = T;
+
+struct Type {
+	let const name : str {public};
+	let const namespace {public};
+	let const size : iSize {public};
+	// struct/tuple types
+	let const members : ?[]Variable {public};
+	// array types
+	let const dimensions : ?[](iSize | Dynamic) {public};
+	// union types
+	let const alternatives : ?[]Type {public};
+	let const enumerators : ?[] {public};
+}
+
+
+
 
 // implement trait array for builtin sized arrays
 export fn begin(self : &[$Size]$) {

@@ -7,7 +7,7 @@ project(Vellum
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_executable(interpreter interpreter.cpp lex.yy.cpp)
+add_executable(interpreter interpreter.cpp parser.cpp lex.yy.cpp ast.hpp)
 
 target_link_libraries(interpreter PUBLIC
 	LLVMCore LLVMRemarks LLVMBitstreamReader

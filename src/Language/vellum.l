@@ -2,6 +2,7 @@
 
 %top{
 	#include <cstdio>
+	#include "ast.hpp"
 	
 %}
 
@@ -15,12 +16,15 @@
 
 
 
-
 %%
 
-\s+
-"Bool"
-"Float32"
+\p{Space}+	
+
+(0[xob])?[0-9]+	return {Token::literal_int};
+[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?	return {Token::literal_float};
+
+"Bool"    	return {Token::Bool};
+"Float32"	return {Token::};
 "Float64"
 "Int"
 "None"
@@ -29,6 +33,7 @@
 "Type"
 "Unsigned"
 "Vector"
+
 "alias"
 "and"
 "break"
@@ -47,6 +52,7 @@
 "if"
 "implements"
 "import"
+"is"
 "let"
 "loop"
 "module"
@@ -63,9 +69,9 @@
 "until"
 "while"
 "yield"
-"_"
-"_[A-Z]\w*"
 "__\w*"
+"_[A-Z]\w*"
+"_"
 
 \w+
 
