@@ -19,54 +19,45 @@
 
 #include "ast.hpp"
 
-tokenizer::tokenizer(std::istream& in, bool l) : source{&in}, line_mode{l} {
-	advance();
-}
-
-void tokenizer::advance() {
-	last = std::exchange(next, read());
-	return;
-}
-Token tokenizer::gettok() noexcept {
-	advance();
-	return last;
-}
-std::optional<Token> tokenizer::gettok_if(const Token::Type t) noexcept {
-	if (next.type == t) {
-		advance();
-		return last;
-	} else {
-		return std::nullopt;
-	}
-}
-Token tokenizer::expect(const Token::Type t) {
-	if (auto n = gettok_if(t)) {
-		return *std::move(n);
-	} else {
-		throw unexpected(last, t);
-	}
-}
-
-tokenizer& tokenizer::ignore(const Token::Type t) noexcept {
-	if (t != Token::eof and next.type == t) {
-		advance();
-	}
-	return *this;
-}
-tokenizer& tokenizer::ignore_consecutive(const Token::Type t) noexcept {
-	ignore(t);
-	while (t != Token::eof and last.type == t) {
-		advance();
-	}
-	return *this;
-}
-
-Token tokenizer::read() {
-	// run tokenizer here
-	return {};
-}
-
 namespace AST {
+
+auto parse_qualified_name(tokenizer& tk) -> unique_ptr<NameAST> {
+	unique_ptr<NameAST> name;
+	if (tk.gettok_if(Token::kw_Bool)) {
+		if (tk.gettok_if(Token::punct_scope)) {
+			auto val = tk.expect({Token::kw_true, Token::kw_false});
+			name->_type = std::make_unique<BuiltinTypeID>("Bool");
+			name->_basename = (val.type == Token::kw_true) ? "true" : "false";
+		} else {
+			name->_type = std::make_unique<BuiltinTypeID>("Type");
+			name->_basename = "Bool";
+		}
+		return name;
+	} else {
+		if (tk.gettok_if(Token::punct_scope)) {
+			name->_discrim.scope.emplace_back();
+		}
+		auto el = tk.expect(Token::identifier);
+		while (tk.gettok_if(Token::punct_scope)) {
+			name->_discrim.scope.push_back(std::move(el.str));
+			el = tk.expect(Token::identifier);
+		}
+		name->_basename = el.str;
+		if (tk.gettok_if(Token::punct_bang)) {
+			auto args = tk.expect(Token::literal_int);
+			name->_discrim.args = stoi(args.str);
+		}
+		return name;
+	}
+}
+
+auto parse_var_decl(tokenizer& tk) -> unique_ptr<VarDeclAST>;
+auto parse_fn_decl(tokenizer& tk) -> unique_ptr<PrototypeAST>;
+auto parse_enum_decl(tokenizer& tk) -> unique_ptr<EnumDeclAST>;
+auto parse_struct_decl(tokenizer& tk) -> unique_ptr<StructProtoAST>;
+auto parse_trait_decl(tokenizer& tk) -> unique_ptr<TraitDeclAST>;
+
+auto parse_expr(tokenizer& tk) -> unique_ptr<ExprAST>;
 
 auto parse_module_def(tokenizer& tk) -> unique_ptr<ModuleAST>;
 
@@ -79,7 +70,7 @@ auto parse_module(tokenizer& tk) -> unique_ptr<ModuleAST> {
 		throw unexpected(tk.gettok(), Token::kw_module);
 	}
 
-	while (tk.peek()) {
+	while (tk) {
 		root->_declarations.push_back(parse_decl(tk));
 	}
 	return root;
@@ -111,14 +102,6 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<ModuleAST> {
 	return root;
 }
 
-auto parse_var_decl(tokenizer& tk) -> unique_ptr<VarDeclAST>;
-auto parse_fn_decl(tokenizer& tk) -> unique_ptr<PrototypeAST>;
-auto parse_enum_decl(tokenizer& tk) -> unique_ptr<EnumDeclAST>;
-auto parse_struct_decl(tokenizer& tk) -> unique_ptr<StructProtoAST>;
-auto parse_trait_decl(tokenizer& tk) -> unique_ptr<TraitDeclAST>;
-
-auto parse_type_id(tokenizer& tk) -> unique_ptr<TypeID>;
-
 auto parse_decl(tokenizer& tk) -> unique_ptr<DeclarationAST> {
 	unique_ptr<DeclarationAST> decl;
 	bool is_export = false;
@@ -136,7 +119,7 @@ auto parse_decl(tokenizer& tk) -> unique_ptr<DeclarationAST> {
 		// parse alias declaration
 		alias->_name = tk.expect(Token::identifier).str;
 		tk.expect(Token::punct_equal);
-		alias->_type = parse_type_id(tk);
+		alias->_type = parse_expr(tk);
 	} break;
 	case Token::kw_fn: {
 		decl = parse_fn_decl(tk);

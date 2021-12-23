@@ -22,6 +22,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <iosfwd>
 #include <map>
 #include <memory>
 #include <string>
@@ -158,9 +159,10 @@ struct Token {
 	std::string str;
 	source_location loc;
 
-	[[nodiscard]] operator bool() const noexcept {
+	[[nodiscard]] bool good() const noexcept {
 		return type != eof and type != unknown;
 	}
+	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
 };
 
 std::string tok_name(Token::Type t);
@@ -181,19 +183,28 @@ class unexpected : std::invalid_argument {
 
 class tokenizer {
  public:
-	tokenizer(std::istream& is, bool l = false);
+	tokenizer(std::istream& is, const char* filename, bool l = false);
 
 	[[nodiscard]] Token gettok() noexcept;
 	[[nodiscard]] std::optional<Token> gettok_if(Token::Type t) noexcept;
-	Token expect(Token::Type t);
+	[[nodiscard]] std::optional<Token>
+	gettok_if(std::initializer_list<Token::Type> ts) noexcept;
 
-	Token peek() noexcept { return next; }
+	Token expect(Token::Type t);
+	Token expect(std::initializer_list<Token::Type> ts);
+
+	[[nodiscard]] Token peek() noexcept { return next; }
 
 	tokenizer& ignore(Token::Type) noexcept;
 	tokenizer& ignore_consecutive(Token::Type t) noexcept;
 
+	[[nodiscard]] bool good() const noexcept { return last.good(); }
+	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
+
  private:
 	std::istream* source{};
+	std::string buffer;
+	source_location buffer_pos;
 	Token last{};
 	Token next{};
 
@@ -201,6 +212,9 @@ class tokenizer {
 	void advance();
 
  public:
+	// If true, the Token::punct_newline token will be returned for the end of
+	// each line, as well as immediately preceeding EOF. Otherwise, newlines are
+	// considered whitespace and discarded.
 	bool line_mode{};
 };
 
@@ -234,15 +248,17 @@ class ASTNode {
 	vector<unique_ptr<ASTNode>> _attributes;
 };
 
-class ExprAST : virtual public ASTNode {};
+class ExprAST : virtual public ASTNode {
+ public:
+	unique_ptr<ExprAST> _type;
+};
 
 /*
  * Type Expressions
  */
 
-class TypeID : public ExprAST {};
-
-class BuiltinTypeID : public TypeID {
+class BuiltinTypeID : public ExprAST {
+ public:
 	string _name;
 };
 
@@ -257,32 +273,32 @@ class UnsignedTypeID : public BuiltinTypeID {
 
 class OwnerTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<TypeID> _owned_type;
+	unique_ptr<ExprAST> _owned_type;
 };
 class SharedTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<TypeID> _owned_type;
+	unique_ptr<ExprAST> _owned_type;
 };
 class ArrayTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<TypeID> _element_type;
+	unique_ptr<ExprAST> _element_type;
 	vector<optional<Integer>> _bounds;
 };
 
-class TupleTypeID : public TypeID {
+class TupleTypeID : public ExprAST {
  public:
-	vector<unique_ptr<TypeID>> _member_types;
+	vector<unique_ptr<ExprAST>> _member_types;
 };
-class UnionTypeID : public TypeID {
+class UnionTypeID : public ExprAST {
  public:
-	set<unique_ptr<TypeID>> _member_types;
+	set<unique_ptr<ExprAST>> _member_types;
 };
 
 class NoneTypeID : public TupleTypeID {};
 class NoreturnTypeID : public UnionTypeID {};
 class ThisTypeID : public BuiltinTypeID {};
 
-class TemplatedTypeID : public TypeID {
+class TemplatedTypeID : public ExprAST {
  public:
 	vector<unique_ptr<ExprAST>> _args;
 };
@@ -292,7 +308,7 @@ class TemplatedTypeID : public TypeID {
  */
 
 class SignatureAST : virtual public ASTNode {
-	vector<unique_ptr<TypeID>> _args, _returns;
+	vector<unique_ptr<ExprAST>> _args, _returns;
 };
 
 struct Discriminators {
@@ -310,12 +326,12 @@ class DeclarationAST : virtual public ASTNode {
 
 class AliasDeclAST : public DeclarationAST {
  public:
-	unique_ptr<TypeID> _type;
+	unique_ptr<ExprAST> _type;
 };
 
 class VarDeclAST : public DeclarationAST {
  public:
-	unique_ptr<TypeID> _type;
+	unique_ptr<ExprAST> _type;
 	bool _is_mut;
 	unique_ptr<ASTNode> _initializer;
 };
@@ -472,7 +488,7 @@ class ResultExprAST : public ControlExprAST, public UnaryExprAST {
 
 class ArgDeclAST : public VarDeclAST {};
 
-class PrototypeAST : public DeclarationAST, public TypeID {
+class PrototypeAST : public DeclarationAST, public ExprAST {
  public:
 	bool _is_proc;
 	optional<string> _linkage;
@@ -486,7 +502,7 @@ enum class Protection {
 	Public,
 };
 
-class StructProtoAST : public DeclarationAST, public TypeID {
+class StructProtoAST : public DeclarationAST, public ExprAST {
  public:
 	vector<unique_ptr<ArgDeclAST>> _args;
 };
@@ -512,7 +528,7 @@ class StructDefAST : public StructProtoAST {
 	vector<unique_ptr<DeclarationAST>> _members;
 };
 
-class EnumDeclAST : public DeclarationAST, public TypeID {
+class EnumDeclAST : public DeclarationAST, public ExprAST {
  public:
 	vector<unique_ptr<EnumeratorAST>> _enumerators;
 };

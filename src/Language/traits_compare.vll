@@ -1,0 +1,216 @@
+// https://www.youtube.com/watch?v=iPVoCTgvi8M
+
+// C++
+auto	add(int a,    int b)    -> int { return a + b; }
+// D
+int	add(int a,    int b)           { return a + b; }
+// Rust
+fn 	add(a: i32,   b: i32)   -> i32 {        a + b  }
+// Swift
+func	add(_ a: Int, _ b: Int) -> Int {        a + b  }
+// Vellum
+fn 	add(a: i32,   b: i32)   -> i32 { return a + b; }
+fn 	add(a: i32,   b: i32)   -> i32 {        a + b  }
+fn 	add(a: i32,   b: i32)   -> i32 =        a + b;
+
+// Haskell
+add :: Int -> Int -> Int
+add a b = a + b
+
+
+// C++
+template <typename T> auto add(T a, T b) -> T { return a + b; }
+auto add(auto a, auto b) { return a + b; }
+// D
+T add(T)(T a, T b) { return a + b; }
+// Rust
+fn add<T: std::ops::Add<Output = T>>(a: T, b: T) -> T { a + b }
+// Swift
+func add<T: Numeric>(_ a: T, _ b: T) -> T { a + b }
+// Vellum
+fn add(a, b) = a + b;
+fn add(a: $T, b: $T) = a + b;
+fn add(a: $T: Numeric, b: $T) = a + b;
+
+// Haskell
+add :: Num t => t -> t -> t
+add a b = a + b
+
+
+
+// C++
+class circle {
+	float r;
+public:
+	explicit circle(float radius) : r{radius} {}
+	auto name() const -> std::string { return "Circle"; }
+	auto area() const -> float { return pi * r * r; }
+	auto perimeter() const -> float {return 2 * pi * r; }
+};
+
+class rectangle {
+	float w, h;
+public:
+	explicit rectangle(float height, float width) :h{height}, w{width} {}
+	auto name() const -> std::string {return "Rectangle"; }
+	auto area() const -> float { return w * h; }
+	auto perimeter() const -> float { return 2 * w + 2 * h; }
+};
+
+template <typename S>
+concept shape = requires(S s) {
+	{ s.name() }      -> std::same_as<std::string>;
+	{ s.area() }      -> std::floating_point;
+	{ s.perimeter() } -> std::floating_point;
+}
+
+void print_shape_info(shape auto s) {
+	fmt::print("Shape: {}\nArea:  {}\nPerim: {}\n",
+	           s.name(), s.area(), s.perimeter());
+}
+
+// D
+class Circle {
+	float r;
+	this(float radius) { r = radius; }
+	string name() const { return "Circle"; }
+	float area() const { return PI * r * r; }
+	float perimeter() const { return 2 * PI * r; }
+}
+
+class Rectangle {
+	float w, h;
+	this(float width,float height) { w = width; h = height; }
+	string name() const { return "Rectangle"; }
+	float area() const { return w * h; }
+	float perimeter() const { return 2 * w + 2 * h; }
+}
+
+template shape(T) {
+	const shape = __traits(compiles, (T t) {
+		t.name();
+		t.area();
+		t.perimeter();
+	});
+}
+
+void printShapeInfo(T)(T s)
+	if (shape!(T))
+{
+	writeln("Shape: ",   s.name(),
+	        "\nArea:  ", s.area(),
+	        "\nPerim: ", s.perimeter(), "\n");
+}
+
+// Rust
+struct Circle { r: f32 }
+struct Rectangle { w: f32, h: f32 }
+
+trait Shape {
+	fn name(&self)      -> String;
+	fn area(&self)      -> f32;
+	fn perimeter(&self) -> f32;
+}
+
+impl Shape for Circle {
+	fn name(&self) -> String { "Circle".to_string() }
+	fn area(&self) -> f32 { PI * self.r * self.r }
+	fn perimeter(&self) -> f32 { 2.0 * PI * self.r }
+}
+
+impl Shape for Rectangle {
+	fn name(&self) -> String { "Rectangle".to_string() }
+	fn area(&self) -> f32 { self.w * self.h }
+	fn perimeter(&self) -> f32 { 2.0 * self.w + 2.0 * self.h }
+}
+
+void print_shape_info<T: Shape>(s: T) {
+	println!("Shape: {}\nArea:  {}\nPerim: {}\n",
+	         s.name(), s.area(), s.perimeter());
+}
+
+// Vellum
+trait Shape {
+	fn name(&self) -> Str;
+	fn area(&self) -> f32;
+	fn perimeter(&self) -> f32;
+}
+
+struct Circle {
+	let r : f32 {public mut};
+	
+	fn name(&self) = "Circle";
+	fn area(&self) = pi * self.r * self.r;
+	fn perimeter(&self) = 2 * self.w + 2 * self.h;
+	// Optional
+	implements Shape;
+}
+
+struct Rectangle {
+	let w: f32 {public mut};
+	let h: f32 {public mut};
+	
+	fn name(&self) = "Rectangle";
+	fn area(&self) = self.w * self.h;
+	fn perimeter(&self) = 2.0 * self.w + 2.0 * self.h;
+	
+	implements Shape;
+}
+
+proc print_shape_info(s: Shape, out: Stream) {
+	out.print("Shape: {}\nArea:  {}\nPerim: {}\n",
+		s.name(), s.area(), s.perimeter());
+}
+
+// Swift
+protocol Shape {
+	func name()      -> String
+	func area()      -> Float
+	func perimeter() -> Float
+}
+
+class Circle : Shape {
+	let r: Float
+	init(r: Float) { self.r = r }
+	func name() -> String { "Circle" }
+	func area() -> Float { Float.pi * r * r }
+	func perimeter() -> Float { 2 * Float.pi * r }
+}
+
+class Rectangle : Shape {
+	let w, h: Float
+	init(w: Float, h: Float) { self.w = w; self.h = h }
+	func name() -> String { "Rectangle" }
+	func area() -> Float { w * h }
+	func perimeter() -> Float { 2 * w + 2 * h }
+}
+
+func printShapeInfo<T: Shape>(_ s: T) {
+	print("Shape: \(s.name())\n" +
+		   "Area:  \(s.area())\n" +
+			"Perim: \(s.perimeter())\n");
+}
+
+// Haskell (1)
+class Shape a where
+	name      :: a -> String
+	area      :: a -> Float
+	perimeter :: a -> Float
+
+data Circle = Circle { r :: Float }
+data Rectangle = Rectangle { w :: Float, h :: Float }
+
+instance Shape Circle where
+	name (Circle _) = "Circle"
+	area (Circle r) = pi * r ^ 2
+	perimeter (Circle r) = 2 * pi * r
+
+instance Shape Rectangle where
+	name (Rectangle _ _) = "Rectangle"
+	area (Rectangle w h) = w * h
+	perimeter (Rectangle w h) = 2 * w + 2 * h
+
+printShapeInfo :: Shape a => a -> IO()
+printShapeInfo s = putStrLn ("Shape: " ++ (name s)           ++ "\n" ++
+                             "Area:  " ++ show (area s)      ++ "\n" ++
+									  "Perim: " ++ show (perimeter s) ++ "\n")

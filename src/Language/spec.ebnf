@@ -24,10 +24,12 @@ fn-prologue    ::= ['extern' [string-literal]] ('fun' | 'proc')
 argument-list   ::= '(' {arg-definition [default-arg]} ')'
 arg-definition  ::= arg-name [':' arg-type-constraint]
 
-var-declaration ::= 'let' var-definition var-initializer ';'
-                  | 'let' 'mut' var-definition [var-initializer] ';'
-var-definition  ::= var-name [':' type-constraint]
-var-initializer ::= '=' expression | braced-initializer
+var-declaration    ::= 'let' var-definition var-initializer ';'
+                     | 'let' 'mut' var-definition [var-initializer] ';'
+var-definition     ::= var-name [':' type-constraint]
+var-initializer    ::= equal-initializer | braced-initializer
+equal-initializer  ::= '=' expression
+braced-initializer ::= '{' expression-list '}'
 
 (* no mutable global variables *)
 global-var-declaration ::= 'let' var-definition var-initializer ';'
@@ -105,11 +107,11 @@ binary-expression ::= expression binary-operator expression
 call-expression ::= primary-expression '(' expression-list ')'
 subscript-expression ::= primary-expression '[' expression-list ']'
 
-if-expression ::= 'if' expression block ['else' (block | if-expression)]
+if-expression ::= ('if' | 'unless') condition block ['else' (block | if-expression)]
                 | expression '?' expression ':' expression
 inverted-if-expression ::= expression 'if' expression ['else' expression]
 
-match-expression ::= 'match' expression '{'
+match-expression ::= 'match' condition '{'
                      match-rule { ',' match-rule} [',' [trivial-match]]
 				   '}'
 match-rule ::= match-specifier '->' (expression | block)
@@ -128,8 +130,8 @@ loop-expression ::=
 	  while keepgoing() { go() }
 	  do { go() } until stop();
 	*)
-	| loop-constraint [label] expression block ['else' expression]
-	| 'do' [label] block loop-constraint expression (';' | ['else' expression])
+	| loop-constraint [label] condition block ['else' expression]
+	| 'do' [label] block loop-constraint condition (';' | ['else' expression])
 	(* infinite loop:
 	  loop {
 	    go();
@@ -171,9 +173,14 @@ for-loop-header ::=
 loop-constraint ::= 'while'
                   (* equivalent to `while not` *)
                   | 'until'
-loop-var-init ::= ['mut'] var-definition '=' expression | '_'
+loop-var-init ::= ['mut'] var-definition equal-initializer
+                | '_'
 label ::= ':' identifier
         | ':' ('for' | 'while' | 'do' | 'loop')
+
+condition ::= expression
+            | 'let' var-definition equal-initializer
+
 list-comprehension ::= 
 
 dot-expression ::= expression '.' call-expression
@@ -215,7 +222,8 @@ value-constraint ::= constant-expression
 type-name ::= builtin-type | struct-id
 struct-id ::= struct-name ['(' {expression} ')']
 builtin-type ::= 'Float32' | 'Float64' | 'Bool' 
-               | 'Type' | 'Noreturn' | 'This'
+               | 'None' | 'Type' | 'Noreturn' | 'This'
+			   | 'i\d+' | 'u\d+'
 			   | '__int8' | '__int16' | '__int32' | '__int64'
 			   | '__uint8' | '__uint16' | '__uint32' | '__uint64'
 
@@ -230,9 +238,10 @@ arg-name    ::= identifier
 attribute-list ::= '#[' attribute {',' attribute} ']'
 attribute ::= qualified-name ['(' expression-list ')']
 
-qualified-name ::= {namespace-id '::'} identifier
+qualified-name ::= [ '::' ] {namespace-id '::'} identifier [ '!' integer-literal ]
+                 | [ 'Bool' '::' ] bool-literal
 
 new-line ::= '\n' | ';'
 empty    ::= 
 
-keyword ::= 'None' | 'Noreturn' | 'This' | 'Type' | 'alias' | 'and' | 'Bool' | 'break' | 'continue' | 'defer' | 'delete' | 'do' | 'else' | 'end' | 'enum' | 'export' | 'Fail' | 'Float' | 'Float32' | 'Float64' | 'fn' | 'for' | 'if' | 'implements' | 'import' | 'Int' | 'Unsigned' | 'let' | 'loop' | 'module' | 'mut' | 'or' | 'private' | 'proc' | 'public' | 'result' | 'return' | 'struct' | 'trait' | 'unless' | 'until' | 'while' | 'yield' | '__[[:alnum:]_]*'
+keyword ::= 'None' | 'Noreturn' | 'This' | 'Type' | 'alias' | 'and' | 'as' | 'Bool' | 'break' | 'continue' | 'defer' | 'delete' | 'do' | 'else' | 'end' | 'enum' | 'export' | 'Fail' | 'Float' | 'Float32' | 'Float64' | 'fn' | 'for' | 'if' | 'implements' | 'import' | 'is' | 'Int' | 'Unsigned' | 'let' | 'loop' | 'module' | 'mut' | 'or' | 'private' | 'proc' | 'public' | 'result' | 'return' | 'struct' | 'trait' | 'unless' | 'until' | 'while' | 'yield' | '__[[:alnum:]_]*'

@@ -1,5 +1,7 @@
 module loc_stats;
 
+import std;
+
 struct counters {
 	let histogram : []i32 {public, private mut};
 	let count     : i32   {public, private mut};

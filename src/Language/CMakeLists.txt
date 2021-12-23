@@ -7,7 +7,8 @@ project(Vellum
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_executable(interpreter interpreter.cpp parser.cpp lex.yy.cpp ast.hpp)
+add_executable(interpreter interpreter.cpp parser.cpp lex.yy.cpp ast.hpp
+	tokenizer.cpp)
 
 target_link_libraries(interpreter PUBLIC
 	LLVMCore LLVMRemarks LLVMBitstreamReader
@@ -25,6 +26,8 @@ target_sources(interpreter PRIVATE vellum.l spec.ebnf precedence.txt)
 
 source_group(lex REGULAR_EXPRESSION ".*\.l")
 
+source_group(vellum REGULAR_EXPRESSION ".*\.vll")
+
 add_custom_target(sources ALL
 	DEPENDS interpreter
-	SOURCES "loc_stats.vll")
+	SOURCES "loc_stats.vll" "traits_compare.vll")

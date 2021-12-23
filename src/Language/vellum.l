@@ -36,6 +36,7 @@
 
 "alias"
 "and"
+"as"
 "break"
 "consume"
 "continue"
@@ -55,6 +56,7 @@
 "is"
 "let"
 "loop"
+"match"
 "module"
 "mut"
 "or"
@@ -71,6 +73,7 @@
 "yield"
 "__\w*"
 "_[A-Z]\w*"
+"_[0-9]+"
 "_"
 
 \w+
