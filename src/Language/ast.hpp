@@ -125,6 +125,8 @@ struct Token {
 		kw_mut,
 		kw_struct,
 		kw_trait,
+		kw_extern,
+		kw_namespace,
 
 		kw_result,
 		kw_return,
@@ -194,6 +196,10 @@ class tokenizer {
 	Token expect(std::initializer_list<Token::Type> ts);
 
 	[[nodiscard]] Token peek() noexcept { return next; }
+	[[nodiscard]] bool check(Token::Type t) noexcept { return next.type == t; }
+	[[nodiscard]] bool check(std::initializer_list<Token::Type> ts) {
+		return std::find(begin(ts), end(ts), next.type) != end(ts);
+	}
 
 	tokenizer& ignore(Token::Type) noexcept;
 	tokenizer& ignore_consecutive(Token::Type t) noexcept;
@@ -322,6 +328,8 @@ class DeclarationAST : virtual public ASTNode {
 	string _name;
 	bool _is_export;
 	Discriminators _synthesized_discriminators;
+	string language;
+	virtual bool is_static_scope() const noexcept { return true; }
 };
 
 class AliasDeclAST : public DeclarationAST {
@@ -334,6 +342,11 @@ class VarDeclAST : public DeclarationAST {
 	unique_ptr<ExprAST> _type;
 	bool _is_mut;
 	unique_ptr<ASTNode> _initializer;
+};
+
+class NamespaceAST : public DeclarationAST {
+ public:
+	vector<unique_ptr<DeclarationAST>> _declarations;
 };
 
 /*
@@ -493,6 +506,8 @@ class PrototypeAST : public DeclarationAST, public ExprAST {
 	bool _is_proc;
 	optional<string> _linkage;
 	unique_ptr<SignatureAST> _signature;
+
+	bool is_static_scope() const noexcept override { return true; }
 };
 
 enum class Protection {
@@ -519,6 +534,7 @@ class FunctionMemberDeclAST : public StructMemberAST, public PrototypeAST {
  public:
 	Protection _access;
 	bool _is_default;
+	using PrototypeAST::is_static_scope;
 };
 
 class StructTraitImpl : public StructMemberAST {};
@@ -546,12 +562,9 @@ class FunctionDefAST : public PrototypeAST {
 	unique_ptr<ASTNode> _body;
 };
 
-class ModuleAST : virtual public ASTNode {
+class ModuleAST : virtual public ASTNode, public NamespaceAST {
  public:
-	string name;
-	bool is_exported;
-	vector<string> imports;
-	vector<unique_ptr<DeclarationAST>> _declarations;
+	vector<string> _imports;
 };
 
 /*
