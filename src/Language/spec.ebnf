@@ -14,12 +14,12 @@ module-imports    ::= {['export'] 'import' module-name}
 ns-decl-seq ::= { ['export'] declaration }
 declaration ::= fn-declaration
               | struct-declaration
-			  | enum-definition
-			  | trait-definition
-			  | global-var-declaration
-			  | alias-definition
-			  | extern-block
-			  | namespace-block
+              | enum-definition
+              | trait-definition
+              | global-var-declaration
+              | alias-definition
+              | extern-block
+              | namespace-block
 
 fn-declaration ::= prototype fn-body
                  | prototype ';'
@@ -55,9 +55,9 @@ struct-body   ::= '{' {struct-member} '}'
 struct-member ::= data-member-definition
                 | [access-key] fn-declaration
                 | [access-key] default-fn-definition
-				| 'defer' trait-id 'to' identifier new-line
-				| 'implements' trait-id new-line
-				| alias-definition
+                | 'defer' trait-id 'to' identifier new-line
+                | 'implements' trait-id new-line
+                | alias-definition
 data-member-definition ::= 'let' var-name ':' type-id access-specifier
 access-specifier ::= '{' (access-key [',' access-key2] ['mut']) '}'
 access-key       ::= 'public' | access-key2
@@ -79,10 +79,10 @@ statement  ::= expression new-line | var-declaration new-line | block
 (* TODO: sort out precedences *)
 expression ::= primary-expression
              | assignment-expression
-			 | unary-expression
-			 | binary-expression
-			 | or-expression
-			 | rewrite-expression
+             | unary-expression
+             | binary-expression
+             | or-expression
+             | rewrite-expression
 
 expression ::= assignment-expression | control-expression
 assignment-expression ::= and-expression ':=' assignment-expression
@@ -91,9 +91,9 @@ control-expression ::= loop-expression
                      | match-expression
                      | result-expression
                      | try-expression
-					 | substrate-expression
-					 | llvm-ir-expression
-					 | 'continue' [label]
+                     | substrate-expression
+                     | llvm-ir-expression
+                     | 'continue' [label]
 result-expression  ::= 'result' [label] [expression]
                      | 'yield' [label] [expression]
                      | 'return' [expression]
@@ -102,19 +102,19 @@ result-expression  ::= 'result' [label] [expression]
 
 
 primary-expression ::= literal
-					 | id-expression
-			         | '(' expression ')'
-					 | tuple-expression
+                     | id-expression
+                     | '(' expression ')'
+                     | tuple-expression
                      | call-expression
-					 | tuple-expression
-					 | subscript-expression
-					 | dot-expression
-					 | placeholder-id
-					 | lambda-expression
-					 | if-expression
-					 | match-expression
-					 | loop-expression
-					 | control-expression
+                     | tuple-expression
+                     | subscript-expression
+                     | dot-expression
+                     | placeholder-id
+                     | lambda-expression
+                     | if-expression
+                     | match-expression
+                     | loop-expression
+                     | control-expression
 expression-list ::= | expression {',' expression}
 assignment-expression ::= expression ':=' expression
 binary-expression ::= expression binary-operator expression
@@ -125,7 +125,7 @@ substrate-expression ::= 'substrate' '{' { substrate-word } '}'
                        | '(:' { substrate-word } ':)'
 substrate-word       ::= literal
                        | id-expression
-					   | control-keyword
+                       | control-keyword
 control-keyword      ::= 'if' | 'result' | 'yield' | 'return' | 'break' | 'end'
 
 (* Rather than trying to define the grammar of LLVM IR here, just accept any
@@ -134,12 +134,12 @@ control-keyword      ::= 'if' | 'result' | 'yield' | 'return' | 'break' | 'end'
 llvm-ir-expression   ::= 'llvm' '{' balanced-code '}'
 balanced-code        ::= identifier balanced-code
                        | literal balanced-code
-					   | operator balanced-code
+                       | operator balanced-code
                        | non-bracket-punctuator balanced-code
-					   | keyword balanced-code
-					   | '(' balanced-code ')'
-					   | '[' balanced-code ']'
-					   | '{' balanced-code '}'
+                       | keyword balanced-code
+                       | '(' balanced-code ')'
+                       | '[' balanced-code ']'
+                       | '{' balanced-code '}'
                        | empty
 
 
@@ -148,8 +148,8 @@ if-expression ::= ('if' | 'unless') condition block ['else' (block | if-expressi
 inverted-if-expression ::= expression 'if' expression ['else' expression]
 
 match-expression ::= 'match' condition '{'
-                     match-rule { ',' match-rule} [',' [trivial-match]]
-				   '}'
+                     match-rule {',' match-rule} [',' [trivial-match]]
+                   '}'
 match-rule ::= match-specifier '->' (expression | block)
 match-specifier ::= argument-list | case-specifier
 (* can stack cases *)
@@ -160,51 +160,51 @@ tuple-expression ::= '(' expression (',' | {',' expression} [','] ) ')'
                    | '(' ')'
 (* All loops can be labeled, allowing for named multi-level break *)
 loop-expression ::=
-	(* See below for examples *)
-	'for' [label] for-loop-header block ['else' expression]
-	(* while and do-while loops:
-	  while keepgoing() { go() }
-	  do { go() } until stop();
-	*)
-	| loop-constraint [label] condition block ['else' expression]
-	| 'do' [label] block loop-constraint condition (';' | ['else' expression])
-	(* infinite loop:
-	  loop {
-	    go();
-	    break if stop()
-	    go();
-	  }
-	  'loop' loops have no else because they have no condition that can be false
-	*)
-	| 'loop' [label] block
+    (* See below for examples *)
+    'for' [label] for-loop-header block ['else' expression]
+    (* while and do-while loops:
+      while keepgoing() { go() }
+      do { go() } until stop();
+    *)
+    | loop-constraint [label] condition block ['else' expression]
+    | 'do' [label] block loop-constraint condition (';' | ['else' expression])
+    (* infinite loop:
+      loop {
+        go();
+        break if stop()
+        go();
+      }
+      'loop' loops have no else because they have no condition that can be false
+    *)
+    | 'loop' [label] block
 
 for-loop-header ::=
-	(* iteration:
-	  for i in range { print(i) }
-	*)
-	  var-definition 'in' expression
-	(* counting:
-	  //count 0 to 9
-	  for i = 0 -> 10        { print(i) }
-	  // count 10 to 1
-	  for i = 10 ; -1        { print(i) }
-	  // count -10 to 8 by 2s
-	  for i = -10 -> 10 ; +2 { print(i) }
-	*)
-	| loop-var-init ['->' expression]
-	  [';' ('+' | '-' | ) integer-literal]
-	(* counting from 0:
-	  // count 0 to 9
-	  for i -> 10 { print(i) }
-	*)
-	| ['mut'] var-definition
-	  [';' ('+' | '-' | ) integer-literal]
-	(* generalized for loop:
-	  for i = 10      while i > 1      ; i / 2    { print(i) }
-	  for i = begin() while i != end() ; i.next() { print(i) }
-	*)
-	| loop-var-init loop-constraint
-	  [';' expression]
+    (* iteration:
+      for i in range { print(i) }
+    *)
+      var-definition 'in' expression
+    (* counting:
+      //count 0 to 9
+      for i = 0 -> 10        { print(i) }
+      // count 10 to 1
+      for i = 10 ; -1        { print(i) }
+      // count -10 to 8 by 2s
+      for i = -10 -> 10 ; +2 { print(i) }
+    *)
+    | loop-var-init ['->' expression]
+      [';' ('+' | '-' | ) integer-literal]
+    (* counting from 0:
+      // count 0 to 9
+      for i -> 10 { print(i) }
+    *)
+    | ['mut'] var-definition
+      [';' ('+' | '-' | ) integer-literal]
+    (* generalized for loop:
+      for i = 10      while i > 1      ; i / 2    { print(i) }
+      for i = begin() while i != end() ; i.next() { print(i) }
+    *)
+    | loop-var-init loop-constraint
+      [';' expression]
 
 loop-constraint ::= 'while'
                   (* equivalent to `while not` *)
@@ -227,8 +227,8 @@ and-expression ::= primary-expression 'and' primary-expression
 binary-operator  ::= '+' | '-' | '*' | '/' | '%'
                    | '+?' | '-?' | '+%' | '-%'
                    | '==' | '!=' | '<=>' | '<' | '>' | '<=' | '>='
-				   | '&' | '|' | '^' 
-				   | '??'
+                   | '&' | '|' | '^' 
+                   | '??'
 prefix-operator  ::= '-' | '+' | '~' | 'not' | '@' | '#'
 postfix-operator ::= '^' | '?'
 
@@ -238,37 +238,37 @@ operator ::= binary-operator | prefix-operator | postfix-operator
 (**)
 
 type-constraint  ::= type-name
-				   | fn-name '(' {expression} ')'
-				   | struct-name '(' {type-constraint | value-constraint} ')'
-				   | trait-id
-				   | '[' ']' type-constraint
-				   | '[' value-constraint ']' type-constraint
-				   | '*' '"C"' type-constraint
-				   | '*' '"C"' 'mut' type-constraint
-				   | '&' type-constraint
-				   | '&' 'mut' type-constraint
-				   | '?' type-constraint
-				   | '(' [type-constraint {',' type-constraint} [',']] ')'
-				   | type-constraint {'|' type-constraint}
-				   | '$' identifier
-				   | '(' '$' arg-definition ')'
-				   | empty
+                   | fn-name '(' {expression} ')'
+                   | struct-name '(' {type-constraint | value-constraint} ')'
+                   | trait-id
+                   | '[' ']' type-constraint
+                   | '[' value-constraint ']' type-constraint
+                   | '*' '"C"' type-constraint
+                   | '*' '"C"' 'mut' type-constraint
+                   | '&' type-constraint
+                   | '&' 'mut' type-constraint
+                   | '?' type-constraint
+                   | '(' [type-constraint {',' type-constraint} [',']] ')'
+                   | type-constraint {'|' type-constraint}
+                   | '$' identifier
+                   | '(' '$' arg-definition ')'
+                   | empty
 value-constraint ::= constant-expression
                    | '$' arg-definition
 type-name ::= builtin-type | struct-id
 struct-id ::= struct-name ['(' {expression} ')']
 builtin-type ::= 'Float32' | 'Float64' | 'Bool' 
                | 'None' | 'Type' | 'Noreturn' | 'This'
-			   | 'i\d+' | 'u\d+'
-			   | '__int8' | '__int16' | '__int32' | '__int64'
-			   | '__uint8' | '__uint16' | '__uint32' | '__uint64'
+               | 'i\d+' | 'u\d+'
+               | '__int8' | '__int16' | '__int32' | '__int64'
+               | '__uint8' | '__uint16' | '__uint32' | '__uint64'
 
 
 operator-id ::= '(' operator ')'
 fn-name     ::= identifier | operator-id
 struct-name ::= identifier
 trait-name  ::= identifier
-var-name    ::= identifier
+var-name    ::= identifier [',' var-name]
 arg-name    ::= identifier
 
 attribute-list ::= '#[' attribute {',' attribute} ']'

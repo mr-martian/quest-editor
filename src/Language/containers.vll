@@ -128,8 +128,27 @@ struct Type {
 	let const enumerators : ?[] {public};
 }
 
+// A type implementing Failure must explicitly declare that it does, merely providing the required interface is not enough
+trait explicit Failure {
+	fn code(self) -> err_code;
+}
 
+struct Fail {
+	implements Failure;
+	let code : err_code {public}
+}
 
+// try expr() will evaluate expr(), then check if the result is an error and return it if so, otherwise it will evaluate to the unwrapped type of expr
+// Still working on the syntax for macros
+macro try:$label (expr : !$T) -> T 
+	= (expr ?? result:@label expr);
+macro try:$label (expr)
+	= (: expr {expr result:@label} ?? :);
+macro try(expr : !$T, label : Label = fn) -> T
+	= match expr {
+		(e : Failure) -> result:@label e,
+		(v) -> v
+	};
 
 // implement trait array for builtin sized arrays
 export fn begin(self : &[$Size]$) {
@@ -149,18 +168,18 @@ export fn end(self : &[]$) {
 export trait array(Data : Type) {
 	implements range_of(Data);
 	
-	fn size(self : &This) -> i64;
-	fn ([])(self : &This, i : i64) -> &Data;
+	fn size(&self) -> i64;
+	fn ([])(&self, i : i64) -> &Data;
 	
 	// Using a union type here doesn't mean the implementation must; this
 	// interface can be implemented by an overload set as well.
 	fn ([:])(
-			self : &This,
+			&self,
 			lb : ?i64, rb : ?i64)
 		-> range_of(Data);
 	
-	fn begin(self : &This) -> iterator_for(Data);
-	fn end(self : &This) -> sentinel;
+	fn begin(&self) -> iterator_for(Data);
+	fn end(&self) -> sentinel;
 	
 	fn (==)(lhs : &This, rhs : &This) -> bool;
 	fn (<=>)(lhs : &This, rhs : &This) -> order;
@@ -175,9 +194,9 @@ export trait list(Data : Type) {
 	fn new(arr :*[$Size : i64]Data) -> This;
 	
 	// these functions have no required return type
-	fn push_back(self : &mut This, val : Data);
-	fn append(self : &mut This, r : range_of(Data));
-	fn pop_back(self : &mut This) -> Data;
+	fn push_back(&mut self, val : Data);
+	fn append(&mut self, r : range_of(Data));
+	fn pop_back(&mut self) -> Data;
 }
 
 export struct vector(Data : Type) {
@@ -194,13 +213,13 @@ export struct vector(Data : Type) {
 	public fn new(arr :*[$Size]Data) -> This 
 		= new(data : arr);
 	
-	public fn push_back(self : &mut This, val : Data) {
+	public fn push_back(&mut self, val : Data) {
 		self.data := {self.data..., val}
 	}
-	public fn append(self : &mut This, r : range_of(Data)) {
+	public fn append(&mut self, r : range_of(Data)) {
 		self.data := {self.data..., r...}
 	}
-	public fn pop_back(self : &mut This) -> Data {
+	public fn pop_back(&mut self) -> Data {
 		let back = self[self.size - 1].move
 		let tmp : []Data [self.size - 1]
 		for (let i : range(self.size - 1)) {
@@ -290,9 +309,9 @@ struct linked_list(T : Type) {
 		implements Iterator(T);
 		let list : &mut(Mut) List {module mut};
 		
-		public fn deref(self : This) = None;
-		public fn next(self : This) = None;
-		public fn prev(self : This) -> ?iterator(Mut)
+		public fn deref(self) = None;
+		public fn next(self) = None;
+		public fn prev(self) -> ?iterator(Mut)
 			= iterator::new(self.list, self.list.tail)?;
 
 		public fn new = default;
@@ -304,10 +323,10 @@ struct linked_list(T : Type) {
 		let list : &mut(Mut) List {module mut};
 		let it   : &mut(Mut) Node {module mut};
 		
-		public fn deref(self : This) -> &T = it.data;
-		public fn next(self : This) -> iterator | end_sentinel
+		public fn deref(self) -> &T = it.data;
+		public fn next(self) -> iterator | end_sentinel
 			= new(self.list, self.it.next) ?? end_sentinel(Mut)::new(self.list);
-		public fn prev(self : This) -> ?iterator
+		public fn prev(self) -> ?iterator
 			= new(self.list, self.it.prev)?;
 
 		public fn new = default;
@@ -320,20 +339,20 @@ struct linked_list(T : Type) {
 	
 	public fn new() -> This = {none, none};
 	
-	public fn begin(self : &This) -> Iterator(T)
+	public fn begin(&self) -> Iterator(T)
 		= iterator(false)::new(self, self.head)
 			?? end_sentinel(false)::new(self);
-	public fn m_begin(self : &mut This) -> Iterator(T)
+	public fn m_begin(&mut self) -> Iterator(T)
 		= iterator(true)::new(self, self.head)
 			?? end_sentinel(true)::new(self);
 	
-	public fn end(self : &This) = end_sentinel(false)::new(self);
-	public fn m_end(self : &mut This) = end_sentinel(true)::new(self);
+	public fn end(&self) = end_sentinel(false)::new(self);
+	public fn m_end(&mut self) = end_sentinel(true)::new(self);
 	
 	// I'm not sure about this syntax for casting/conversion
-	public fn is_empty(self : This) -> bool = bool(head);
+	public fn is_empty(self) -> bool = bool(head);
 	
-	public fn size(self : &This) -> iSize {
+	public fn size(&self) -> iSize {
 		fn sz(node : &Node, count : iSize) {
 			if node {
 				return #[tail] sz(node.next, count + 1);
@@ -344,7 +363,7 @@ struct linked_list(T : Type) {
 		return sz(self.head, 0);
 	}
 	
-	public fn insert_front(self : &mut This, data : T) -> None {
+	public fn insert_front(&mut self, data : T) -> None {
 		if self.head {
 			self.head := std::alloc(Node, consume(data), consume(self.head), none);
 			self.head.next.prev := self.head;
@@ -353,7 +372,7 @@ struct linked_list(T : Type) {
 			self.tail := self.head := std::alloc(Node, consume(data), none, none);
 		}
 	}
-	public fn insert_back(self : &mut This, data : T) -> None {
+	public fn insert_back(&mut self, data : T) -> None {
 		if self.tail {
 			self.tail := self.tail.next := std::alloc(Node, consume(data), none, self.tail);
 		} else {
@@ -362,7 +381,7 @@ struct linked_list(T : Type) {
 		}
 	}
 	
-	public fn insert(self : &mut This, data : T, pos : iterator($)) -> None {
+	public fn insert(&mut self, data : T, pos : iterator($)) -> None {
 		assert(self == pos.list);
 		if pos.prev() {
 			let n = std::alloc(Node, consume(data), none, none);
@@ -380,12 +399,12 @@ struct linked_list(T : Type) {
 			self.tail := self.head := consume(n);
 		}
 	}
-	public fn insert(self : &mut This, data : &T, _ : end_sentinel($)) -> None {
+	public fn insert(&mut self, data : &T, _ : end_sentinel($)) -> None {
 		assert(self == pos.list);
 		self.insert_back(data);
 	}
 	
-	public fn erase(self : &mut This, pos : iterator($)) -> None {
+	public fn erase(&mut self, pos : iterator($)) -> None {
 		assert(self == pos.list);
 		
 		let mut node : owner(Node);
@@ -403,7 +422,7 @@ struct linked_list(T : Type) {
 		}
 	}
 	
-	public fn erase_front(self : &mut This) -> None {
+	public fn erase_front(&mut self) -> None {
 		if self.head {
 			node := consume(self.head)?;
 			self.head := consume(node.next)?;
@@ -413,7 +432,7 @@ struct linked_list(T : Type) {
 		}
 	}
 	
-	public fn clear(self : &mut This) {
+	public fn clear(&mut self) {
 		// RAII handles all cleanup
 		self.tail := none;
 		self.head := none;
@@ -479,22 +498,22 @@ struct linked_list(T : Type) {
 		
 		// other functions provided by C++ std::list, may or may not fit in
 		// with this language's paradigms
-		public fn splice(self : &mut This, pos : iterator(false),
+		public fn splice(&mut self, pos : iterator(false),
 		                 other : &mut This) -> None;
-		public fn splice(self : &mut This, pos : iterator(false),
+		public fn splice(&mut self, pos : iterator(false),
 		                 other : &mut This, it : iterator(false)) -> None;
-		public fn splice(self : &mut This, pos : iterator(false),
+		public fn splice(&mut self, pos : iterator(false),
 		                 other : &mut This, first : iterator(false),
 		                 last : iterator(false)) -> None;
 		
-		public fn remove(self : &mut This, value : &T) -> iSize;
-		public fn remove_if(self : &mut This, pred) -> iSize;
+		public fn remove(&mut self, value : &T) -> iSize;
+		public fn remove_if(&mut self, pred) -> iSize;
 		
-		public fn reverse(self : This) -> This;
+		public fn reverse(self) -> This;
 		
-		public fn unique(self : This, pred = (==)) -> This;
+		public fn unique(self, pred = (==)) -> This;
 		
-		public fn sort(self : This, comp = (<)) -> This;
+		public fn sort(self, comp = (<)) -> This;
 	}
 }
 
@@ -506,8 +525,8 @@ struct iterator {
 	let it : &Node {module};
 	
 	// Some languages have &self.it?.data instead
-	fn deref(self : This) -> ?&T = &self.it.data?;
-	fn next(self : This) -> ?This
+	fn deref(self) -> ?&T = &self.it.data?;
+	fn next(self) -> ?This
 		= match self.type {
 			case node -> 
 				{node, self.it.next}
@@ -518,7 +537,7 @@ struct iterator {
 			// incrementing the end sentinel fails
 			case end  -> none;
 		};
-	fn prev(self : This) -> ?This
+	fn prev(self) -> ?This
 		= match self.type {
 			case node -> 
 				{node, self.it.next}
@@ -534,9 +553,9 @@ struct mut_iterator {
 	let type : enum(node, beg, end);
 	let it : &mut Node;
 	
-	fn deref(self : &This) -> ?&mut T
+	fn deref(&self) -> ?&mut T
 		= self.it.?;
-	fn next(self : &This) -> ?This
+	fn next(&self) -> ?This
 		= match self.type {
 			case node -> 
 				{node, self.it.next}
@@ -547,7 +566,7 @@ struct mut_iterator {
 			// incrementing the end sentinel fails
 			case end  -> none;
 		};
-	fn prev(self : &This) -> ?This
+	fn prev(&self) -> ?This
 		= match self.type {
 			case node -> 
 				{node, self.it.prev}
