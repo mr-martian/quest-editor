@@ -1,7 +1,8 @@
 %top{
-  #include <cstdio>
-  #include <iostream>
-  #include <iomanip>
+#include <cstdio>
+#include <iomanip>
+#include <iostream>
+	// clang-format off
 %}
 
 %class{
@@ -29,18 +30,21 @@ word    (\w|\p{Punctuation})+
 .       ch += size();
 
 %%
+// hack to convince clang-format to align at column 0
+namespace {}
+// clang-format on
 
-int main(int argc, char **argv) {
-  std::FILE *fd = stdin;
-  if (argc > 1 && (fd = std::fopen(argv[1], "r")) == nullptr)
-    std::exit(EXIT_FAILURE);
-  // create a lexer that consumes a file or reads stdin
-  Lexer lexer(fd);
-  // here we go!
-  lexer.lex();
-  // display the results
-  lexer.results();
-  if (fd != stdin)
-    std::fclose(fd);
-  return 0;
+int main(int argc, char** argv) {
+	std::FILE* fd = stdin;
+	if (argc > 1 && (fd = std::fopen(argv[1], "r")) == nullptr)
+		std::exit(EXIT_FAILURE);
+	// create a lexer that consumes a file or reads stdin
+	Lexer lexer(fd);
+	// here we go!
+	lexer.lex();
+	// display the results
+	lexer.results();
+	if (fd != stdin)
+		std::fclose(fd);
+	return 0;
 }

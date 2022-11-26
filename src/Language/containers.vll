@@ -143,7 +143,7 @@ struct Fail {
 macro try:$label (expr : !$T) -> T 
 	= (expr ?? result:@label expr);
 macro try:$label (expr)
-	= (: expr {expr result:@label} ?? :);
+	(: expr {expr result:@label} ?? :)
 macro try(expr : !$T, label : Label = fn) -> T
 	= match expr {
 		(e : Failure) -> result:@label e,

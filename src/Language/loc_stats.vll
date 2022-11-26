@@ -116,7 +116,7 @@ struct counters {
 		:);
 }
 
-proc count(input, mut c : counters, tab_width) -> counters, c {
+proc count(input, mut c : counters, tab_width) -> counters {
 	for raw_line : str = input.getline while input.good ; input.getline {
 		let line = raw_line.strip_trailing_whitespace;
 		let mut len = 0;
@@ -131,7 +131,7 @@ proc count(input, mut c : counters, tab_width) -> counters, c {
 	}
 	return c;
 }
-proc count_desugared(input, mut c : counters, tab_width) -> counters, c {
+proc count_desugared(input, mut c : counters, tab_width) -> counters {
 	for raw_line : str = input.getline while input.good ; input.getline {
 		let line = raw_line.strip_trailing_whitespace;
 		let mut len = 0;
@@ -154,7 +154,7 @@ proc count_desugared(input, mut c : counters, tab_width) -> counters, c {
 	}
 	return c;
 }
-proc count_desugared2(input, mut c : counters, tab_width) -> counters, c {
+proc count_desugared2(input, mut c : counters, tab_width) -> counters {
 	//for raw_line : str = input.getline while input.good ; input.getline {
 	input.getline |> proc& _L1(raw_line : str) -> None {
 		if input.good {
@@ -186,7 +186,7 @@ proc count_desugared2(input, mut c : counters, tab_width) -> counters, c {
 	//}
 	return c;
 }
-proc count_substrate(input, mut c : counters, tab_width) -> counters, c {
+proc count_substrate(input, mut c : counters, tab_width) -> counters {
 	substrate {
 		// input.getline |> proc& _L1(raw_line : str) -> None {
 		input.getline

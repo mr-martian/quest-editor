@@ -1,20 +1,9 @@
 /* *****************************************************************************
- * %{QMAKE_PROJECT_NAME}
- * Copyright (c) %YEAR% killerbee
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Vellum
+ * Copyright (c) 2022 Bee (@killerbee13), Daniel (@mr-martian), Dusty
+ * (@d-us-vb), Richard (@CodeTriangle)
  * ****************************************************************************/
+
 #ifndef AST_HPP
 #define AST_HPP
 
@@ -25,6 +14,7 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -77,7 +67,7 @@ struct Token {
 		op_wminus,  // -%
 		op_bitand,  // &
 		op_bitor,   // |
-		op_bitxor,  // ^
+		op_carat,   // ^
 		op_compl,   // ~
 		op_at,      // @
 		op_hash,    // #
@@ -92,9 +82,10 @@ struct Token {
 		op_qmqm,    // ??
 		op_assign,  // :=
 
-		kw_and,
-		kw_or,
-		kw_not,
+		op_and,
+		op_or,
+		op_not,
+		op_xor,
 
 		kw_Bool,
 		kw_Fail,
@@ -128,21 +119,27 @@ struct Token {
 		kw_extern,
 		kw_namespace,
 
+		kw_break,
+		kw_consume,
+		kw_continue,
+		kw_match,
 		kw_result,
 		kw_return,
-		kw_break,
-		kw_continue,
 		kw_yield,
 
+		kw_as,
 		kw_if,
+		kw_is,
 		kw_else,
 		kw_end,
 		kw_for,
 		kw_do,
+		kw_unless,
 		kw_until,
 		kw_while,
 		kw_loop,
 		kw_in,
+		kw_typeof,
 
 		kw_defer,
 		kw_implements,
@@ -153,13 +150,13 @@ struct Token {
 		kw_underscore, // _
 
 		reserved_id, // __.*
+		placeholder, // _[0-9]+
 
 		identifier,
 
 	} type;
 
 	std::string str;
-	source_location loc;
 
 	[[nodiscard]] bool good() const noexcept {
 		return type != eof and type != unknown;
@@ -179,8 +176,9 @@ class unexpected : std::invalid_argument {
 	}
 
 	unexpected(const Token& found, Token::Type expected)
-	    : std::invalid_argument(str(found, expected)), found(found),
-	      expected(expected) {}
+	    : std::invalid_argument(str(found, expected))
+	    , found(found)
+	    , expected(expected) {}
 };
 
 class tokenizer {
@@ -189,8 +187,8 @@ class tokenizer {
 
 	[[nodiscard]] Token gettok() noexcept;
 	[[nodiscard]] std::optional<Token> gettok_if(Token::Type t) noexcept;
-	[[nodiscard]] std::optional<Token>
-	gettok_if(std::initializer_list<Token::Type> ts) noexcept;
+	[[nodiscard]] std::optional<Token> gettok_if(
+	    std::initializer_list<Token::Type> ts) noexcept;
 
 	Token expect(Token::Type t);
 	Token expect(std::initializer_list<Token::Type> ts);
@@ -265,6 +263,10 @@ class ExprAST : virtual public ASTNode {
 
 class BuiltinTypeID : public ExprAST {
  public:
+	BuiltinTypeID() = default;
+	BuiltinTypeID(std::string name)
+	    : _name(std::move(name)) {}
+
 	string _name;
 };
 
@@ -489,7 +491,9 @@ class MatchExprAST : public ControlExprAST {
  public:
 };
 
-class ResultExprAST : public ControlExprAST, public UnaryExprAST {
+class ResultExprAST
+    : public ControlExprAST
+    , public UnaryExprAST {
  public:
 	string _result_keyword;
 	optional<string> _target_label;
@@ -501,7 +505,9 @@ class ResultExprAST : public ControlExprAST, public UnaryExprAST {
 
 class ArgDeclAST : public VarDeclAST {};
 
-class PrototypeAST : public DeclarationAST, public ExprAST {
+class PrototypeAST
+    : public DeclarationAST
+    , public ExprAST {
  public:
 	bool _is_proc;
 	optional<string> _linkage;
@@ -517,20 +523,26 @@ enum class Protection {
 	Public,
 };
 
-class StructProtoAST : public DeclarationAST, public ExprAST {
+class StructProtoAST
+    : public DeclarationAST
+    , public ExprAST {
  public:
 	vector<unique_ptr<ArgDeclAST>> _args;
 };
 
 class StructMemberAST : public DeclarationAST {};
 
-class DataMemberDeclAST : public StructMemberAST, public VarDeclAST {
+class DataMemberDeclAST
+    : public StructMemberAST
+    , public VarDeclAST {
  public:
 	Protection _read;
 	Protection _mut;
 };
 
-class FunctionMemberDeclAST : public StructMemberAST, public PrototypeAST {
+class FunctionMemberDeclAST
+    : public StructMemberAST
+    , public PrototypeAST {
  public:
 	Protection _access;
 	bool _is_default;
@@ -544,7 +556,9 @@ class StructDefAST : public StructProtoAST {
 	vector<unique_ptr<DeclarationAST>> _members;
 };
 
-class EnumDeclAST : public DeclarationAST, public ExprAST {
+class EnumDeclAST
+    : public DeclarationAST
+    , public ExprAST {
  public:
 	vector<unique_ptr<EnumeratorAST>> _enumerators;
 };
@@ -562,7 +576,9 @@ class FunctionDefAST : public PrototypeAST {
 	unique_ptr<ASTNode> _body;
 };
 
-class ModuleAST : virtual public ASTNode, public NamespaceAST {
+class ModuleAST
+    : virtual public ASTNode
+    , public NamespaceAST {
  public:
 	vector<string> _imports;
 };

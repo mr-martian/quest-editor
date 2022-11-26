@@ -1,26 +1,16 @@
 /* *****************************************************************************
- * %{QMAKE_PROJECT_NAME}
- * Copyright (c) %YEAR% killerbee
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Vellum
+ * Copyright (c) 2022 Bee (@killerbee13), Daniel (@mr-martian), Dusty
+ * (@d-us-vb), Richard (@CodeTriangle)
  * ****************************************************************************/
 
 #include "ast.hpp"
 #include <istream>
 
 tokenizer::tokenizer(std::istream& in, const char* filename, bool l)
-    : source{&in}, buffer_pos{filename}, line_mode{l} {
+    : source{&in}
+    , buffer_pos{filename}
+    , line_mode{l} {
 	advance();
 }
 
@@ -48,6 +38,15 @@ Token tokenizer::expect(const Token::Type t) {
 	}
 }
 
+Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
+	if (std::any_of(ts.begin(), ts.end(),
+	                [&](const auto& t) { return t == next.type; })) {
+		return gettok();
+	} else {
+		throw unexpected(last, Token::unknown);
+	}
+}
+
 tokenizer& tokenizer::ignore(const Token::Type t) noexcept {
 	if (t != Token::eof and next.type == t) {
 		advance();
@@ -65,14 +64,14 @@ tokenizer& tokenizer::ignore_consecutive(const Token::Type t) noexcept {
 Token tokenizer::read() {
 	if (buffer.empty()) {
 		if (not *source) {
-			return Token{Token::eof, "end of file", buffer_pos};
+			return Token{Token::eof, "end of file"};
 		} else {
 			auto old_pos = buffer_pos;
 			std::getline(*source, buffer, '\n');
 			++buffer_pos.line;
 			buffer_pos.col = 0;
 			if (line_mode) {
-				return {Token::punct_newline, "", old_pos};
+				return {Token::punct_newline, ""};
 			} else {
 				return read();
 			}

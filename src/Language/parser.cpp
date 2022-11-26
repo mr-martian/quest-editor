@@ -1,20 +1,7 @@
 /* *****************************************************************************
  * Vellum
- * Copyright (c) 2021 Bee (@killerbee13), Daniel (@mr-martian), Dusty
+ * Copyright (c) 2022 Bee (@killerbee13), Daniel (@mr-martian), Dusty
  * (@d-us-vb), Richard (@CodeTriangle)
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * ****************************************************************************/
 
 #include "ast.hpp"
@@ -111,8 +98,8 @@ auto parse_namespace_block(tokenizer& tk, const DeclarationAST& outer)
 
 auto parse_module(tokenizer& tk) -> unique_ptr<ModuleAST> {
 	unique_ptr<ModuleAST> root;
-	if (tk.peek().type == Token::kw_export or
-	    tk.peek().type == Token::kw_module) {
+	if (tk.peek().type == Token::kw_export
+	    or tk.peek().type == Token::kw_module) {
 		root = parse_module_def(tk);
 		root->language = "Vellum";
 	} else {
@@ -149,13 +136,12 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<ModuleAST> {
 }
 
 auto parse_extern_decl(tokenizer& tk, const DeclarationAST& outer)
-    -> unique_ptr<NamespaceAST> {
+    -> unique_ptr<DeclarationAST> {
 	const auto& context = outer._synthesized_discriminators;
 	unique_ptr<DeclarationAST> decl;
-	string language =
-	    tk.gettok_if(Token::literal_string)
-	        .value_or(Token{Token::literal_string, outer.language, {}})
-	        .str;
+	string language = tk.gettok_if(Token::literal_string)
+	                      .value_or(Token{Token::literal_string, outer.language})
+	                      .str;
 	if (tk.check({Token::kw_fn, Token::kw_proc})) {
 		decl = parse_fn_decl(tk, context);
 		decl->language = language;
@@ -166,6 +152,7 @@ auto parse_extern_decl(tokenizer& tk, const DeclarationAST& outer)
 		alias->_declarations = parse_ns_decl_seq(tk, *alias);
 		tk.expect(Token::punct_rbrace);
 	}
+	return decl;
 }
 
 auto parse_decl(tokenizer& tk, const DeclarationAST& outer)

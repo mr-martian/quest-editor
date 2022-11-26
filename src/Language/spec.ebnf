@@ -34,6 +34,7 @@ argument-list   ::= '(' {arg-definition [default-arg]} ')'
 arg-definition  ::= arg-name [':' arg-type-constraint]
 
 var-declaration    ::= 'let' var-definition var-initializer ';'
+                     | 'let' 'const' var-definition var-initializer ';'
                      | 'let' 'mut' var-definition [var-initializer] ';'
 var-definition     ::= var-name [':' type-constraint]
 var-initializer    ::= equal-initializer | braced-initializer
@@ -42,6 +43,7 @@ braced-initializer ::= '{' expression-list '}'
 
 (* no mutable global variables *)
 global-var-declaration ::= 'let' var-definition var-initializer ';'
+                         | 'let' 'const' var-definition var-initializer ';'
 
 alias-definition ::= 'alias' identifier '=' type-id ';'
 
@@ -115,6 +117,7 @@ primary-expression ::= literal
                      | match-expression
                      | loop-expression
                      | control-expression
+					 | await-expression
 expression-list ::= | expression {',' expression}
 assignment-expression ::= expression ':=' expression
 binary-expression ::= expression binary-operator expression
@@ -229,7 +232,7 @@ binary-operator  ::= '+' | '-' | '*' | '/' | '%'
                    | '==' | '!=' | '<=>' | '<' | '>' | '<=' | '>='
                    | '&' | '|' | '^' 
                    | '??'
-prefix-operator  ::= '-' | '+' | '~' | 'not' | '@' | '#'
+prefix-operator  ::= '-' | '+' | '~' | 'not' | '@' | '#' | 'await'
 postfix-operator ::= '^' | '?'
 
 operator ::= binary-operator | prefix-operator | postfix-operator
