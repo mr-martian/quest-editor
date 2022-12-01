@@ -5,6 +5,7 @@
  * ****************************************************************************/
 
 #include "ast.hpp"
+#include LEX_HEADER
 
 // avoid a dynamic_cast without opening up possibility of memory leak
 template <typename Class, typename Base, typename... Args>

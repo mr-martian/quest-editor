@@ -1,14 +1,18 @@
+// clang-format off
 %option unicode dotall nodefault
 
+%option token-type="asyncpp::generator<Token>"
+%option exception="std::invalid_argument(\"Scanner jammed\")"
+
 %top{
-#include AST_HEADER
+#include TOKEN_HEADER
+//#include <coroutine>
+#include <asyncpp/generator.h>
 
 // clang-format off
 %}
 
 %class{
-
-	Token _type;
 
 %}
 
@@ -20,122 +24,160 @@ literal_int (0[xob])?[0-9]+
 decimal_int [0-9]+
 literal_float	[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?
 
+%x COMMENT
+
 %%
 
+
+\n		co_yield {Token::punct_newline};
 \p{Space}+	
 
-{literal_int}	return (_type = {Token::literal_int, str()}).good();
-{literal_float}	return (_type = {Token::literal_float, str()}).good();
+"/*"	start(COMMENT);
+<COMMENT>{
+"*/"	start(INITIAL);
+[^*]+	// ignore everything in comments
+"*"+[^*/]*	// ignore *s not followed by /
+<<EOF>>	lexer_error("Block comment not ended before end of file"); co_return;
+}
 
-"Bool"    	return (_type = {Token::kw_Bool}).good();
-"Fail"	return (_type = {Token::kw_Fail}).good();
-"Float32"	return (_type = {Token::kw_Float32}).good();
-"Float64"	return (_type = {Token::kw_Float64}).good();
-"Int"	return (_type = {Token::kw_Int}).good();
-"None"	return (_type = {Token::kw_None}).good();
-"Noreturn"	return (_type = {Token::kw_Noreturn}).good();
-"This"	return (_type = {Token::kw_This}).good();
-"Type"	return (_type = {Token::kw_Type}).good();
-"Unsigned"	return (_type = {Token::kw_Unsigned}).good();
+{literal_int}	co_yield {Token::literal_int, str()};
+{literal_float}	co_yield {Token::literal_float, str()};
 
-i([0-9]+)	return (_type = {Token::id_int, str()}).good();
-u([0-9]+)	return (_type = {Token::id_unsigned, str()}).good();
+"Bool"	co_yield {Token::kw_Bool};
+"Byte"	co_yield {Token::kw_Byte};
+"Fail"	co_yield {Token::kw_Fail};
+"Float32"	co_yield {Token::kw_Float32};
+"Float64"	co_yield {Token::kw_Float64};
+"Int"	co_yield {Token::kw_Int};
+"None"	co_yield {Token::kw_None};
+"Noreturn"	co_yield {Token::kw_Noreturn};
+"This"	co_yield {Token::kw_This};
+"Type"	co_yield {Token::kw_Type};
+"Unsigned"	co_yield {Token::kw_Unsigned};
 
-"alias"	return (_type = {Token::kw_alias}).good();
-"as"	return (_type = {Token::kw_as}).good();
-"break"	return (_type = {Token::kw_break}).good();
-"consume"	return (_type = {Token::kw_consume}).good();
-"continue"	return (_type = {Token::kw_continue}).good();
-"defer"	return (_type = {Token::kw_defer}).good();
-"delete"	return (_type = {Token::kw_delete}).good();
-"do"	return (_type = {Token::kw_do}).good();
-"else"	return (_type = {Token::kw_else}).good();
-"end"	return (_type = {Token::kw_end}).good();
-"enum"	return (_type = {Token::kw_enum}).good();
-"export"	return (_type = {Token::kw_export}).good();
-"false"	return (_type = {Token::kw_false}).good();
-"fn"	return (_type = {Token::kw_fn}).good();
-"for"	return (_type = {Token::kw_for}).good();
-"if"	return (_type = {Token::kw_if}).good();
-"implements"	return (_type = {Token::kw_implements}).good();
-"import"	return (_type = {Token::kw_import}).good();
-"is"	return (_type = {Token::kw_is}).good();
-"let"	return (_type = {Token::kw_let}).good();
-"loop"	return (_type = {Token::kw_loop}).good();
-"match"	return (_type = {Token::kw_match}).good();
-"module"	return (_type = {Token::kw_module}).good();
-"mut"	return (_type = {Token::kw_mut}).good();
-"private"	return (_type = {Token::kw_private}).good();
-"proc"	return (_type = {Token::kw_proc}).good();
-"public"	return (_type = {Token::kw_public}).good();
-"result"	return (_type = {Token::kw_result}).good();
-"return"	return (_type = {Token::kw_return}).good();
-"struct"	return (_type = {Token::kw_struct}).good();
-"trait"	return (_type = {Token::kw_trait}).good();
-"true"	return (_type = {Token::kw_true}).good();
-"typeof"	return (_type = {Token::kw_typeof}).good();
-"unless"	return (_type = {Token::kw_unless}).good();
-"until"	return (_type = {Token::kw_until}).good();
-"while"	return (_type = {Token::kw_while}).good();
-"yield"	return (_type = {Token::kw_yield}).good();
+"i"([0-9]+)	co_yield {Token::id_int, str()};
+"u"([0-9]+)	co_yield {Token::id_unsigned, str()};
 
-"__\w*"	return (_type = {Token::reserved_id, str()}).good();
-"_[A-Z]\w*"	return (_type = {Token::reserved_id, str()}).good();
-"_[0-9]+"	return (_type = {Token::placeholder}).good();
-"_"	return (_type = {Token::kw_underscore}).good();
+"__"\w*	co_yield {Token::reserved_id, str()};
+"_"[A-Z]\w*	co_yield {Token::reserved_id, str()};
+"_"[0-9]+	co_yield {Token::placeholder, str()};
+"_"	co_yield {Token::kw_underscore};
 
-"{"	return (_type = {Token::punct_lbrace}).good();
-"}"	return (_type = {Token::punct_rbrace}).good();
-"\["	return (_type = {Token::punct_lbrck}).good();
-"\]"	return (_type = {Token::punct_rbrck}).good();
-"\("	return (_type = {Token::punct_lparen}).good();
-"\)"	return (_type = {Token::punct_rparen}).good();
-","	return (_type = {Token::punct_comma}).good();
-";"	return (_type = {Token::punct_semi}).good();
-"="	return (_type = {Token::punct_equal}).good();
-"->"	return (_type = {Token::punct_arrow}).good();
-":"	return (_type = {Token::punct_colon}).good();
-"::"	return (_type = {Token::punct_scope}).good();
-"!"	return (_type = {Token::punct_bang}).good();
-"\$"	return (_type = {Token::punct_dollar}).good();
-"#\["	return (_type = {Token::punct_attr}).good();
-"\n"	return (_type = {Token::punct_newline}).good();
+"alias"	co_yield {Token::kw_alias};
+"asm"	co_yield {Token::kw_asm};
+"as"	co_yield {Token::kw_as};
+"await"	co_yield {Token::kw_await};
+"break"	co_yield {Token::kw_break};
+"consume"	co_yield {Token::kw_consume};
+"continue"	co_yield {Token::kw_continue};
+"defer"	co_yield {Token::kw_defer};
+"delete"	co_yield {Token::kw_delete};
+"do"	co_yield {Token::kw_do};
+"drop"	co_yield {Token::kw_drop};
+"else"	co_yield {Token::kw_else};
+"end"	co_yield {Token::kw_end};
+"enum"	co_yield {Token::kw_enum};
+"export"	co_yield {Token::kw_export};
+"false"	co_yield {Token::kw_false};
+"fn"	co_yield {Token::kw_fn};
+"for"	co_yield {Token::kw_for};
+"if"	co_yield {Token::kw_if};
+"implements"	co_yield {Token::kw_implements};
+"import"	co_yield {Token::kw_import};
+"is"	co_yield {Token::kw_is};
+"let"	co_yield {Token::kw_let};
+"loop"	co_yield {Token::kw_loop};
+"match"	co_yield {Token::kw_match};
+"module"	co_yield {Token::kw_module};
+"mut"	co_yield {Token::kw_mut};
+"private"	co_yield {Token::kw_private};
+"proc"	co_yield {Token::kw_proc};
+"public"	co_yield {Token::kw_public};
+"result"	co_yield {Token::kw_result};
+"return"	co_yield {Token::kw_return};
+"struct"	co_yield {Token::kw_struct};
+"substrate"	co_yield {Token::kw_substrate};
+"trait"	co_yield {Token::kw_trait};
+"true"	co_yield {Token::kw_true};
+"typeof"	co_yield {Token::kw_typeof};
+"unless"	co_yield {Token::kw_unless};
+"until"	co_yield {Token::kw_until};
+"while"	co_yield {Token::kw_while};
+"yield"	co_yield {Token::kw_yield};
 
-"and"	return (_type = {Token::op_and}).good();
-"or"	return (_type = {Token::op_or}).good();
-"not"	return (_type = {Token::op_not}).good();
-"xor"	return (_type = {Token::op_xor}).good();
-"\."	return (_type = {Token::op_dot}).good();
-"\+"	return (_type = {Token::op_plus}).good();
-"-"	return (_type = {Token::op_minus}).good();
-"\*"	return (_type = {Token::op_times}).good();
-"/"	return (_type = {Token::op_div}).good();
-"%"	return (_type = {Token::op_mod}).good();
-"\+\?"	return (_type = {Token::op_qplus}).good();
-"-\?"	return (_type = {Token::op_qminus}).good();
-"\+%"	return (_type = {Token::op_wplus}).good();
-"-%"	return (_type = {Token::op_wminus}).good();
-"&"	return (_type = {Token::op_bitand}).good();
-"\|"	return (_type = {Token::op_bitor}).good();
-"^"	return (_type = {Token::op_carat}).good();
-"~"	return (_type = {Token::op_compl}).good();
-"@"	return (_type = {Token::op_at}).good();
-"#"	return (_type = {Token::op_hash}).good();
-"=="	return (_type = {Token::op_equal}).good();
-"!="	return (_type = {Token::op_unequal}).good();
-"<=>"	return (_type = {Token::op_cmp}).good();
-"<"	return (_type = {Token::op_less}).good();
-">"	return (_type = {Token::op_greater}).good();
-"<="	return (_type = {Token::op_lte}).good();
-">="	return (_type = {Token::op_gte}).good();
-"\?"	return (_type = {Token::op_qm}).good();
-"\?\?"	return (_type = {Token::op_qmqm}).good();
-":="	return (_type = {Token::op_assign}).good();
+":="	co_yield {Token::op_assign};
+"+="	co_yield {Token::op_plus_assign};
+"+?="	co_yield {Token::op_qplus_assign};
+"+%="	co_yield {Token::op_wplus_assign};
+"-="	co_yield {Token::op_minus_assign};
+"-?="	co_yield {Token::op_qminus_assign};
+"-%="	co_yield {Token::op_wminus_assign};
+"*="	co_yield {Token::op_times_assign};
+"/="	co_yield {Token::op_div_assign};
+"%="	co_yield {Token::op_rem_assign};
+"&="	co_yield {Token::op_bitand_assign};
+"|="	co_yield {Token::op_bitor_assign};
+"<<="	co_yield {Token::op_lshift_assign};
+">>="	co_yield {Token::op_rshift_assign};
 
+"{"	co_yield {Token::punct_lbrace};
+"}"	co_yield {Token::punct_rbrace};
+"["	co_yield {Token::punct_lbrck};
+"]"	co_yield {Token::punct_rbrck};
+"("	co_yield {Token::punct_lparen};
+")"	co_yield {Token::punct_rparen};
+","	co_yield {Token::punct_comma};
+";"	co_yield {Token::punct_semi};
+"="	co_yield {Token::punct_equal};
+"->"	co_yield {Token::punct_arrow};
+":"	co_yield {Token::punct_colon};
+"::"	co_yield {Token::punct_scope};
+"!"	co_yield {Token::punct_bang};
+"$"	co_yield {Token::punct_dollar};
+"#["	co_yield {Token::punct_attr};
+"(:"	co_yield {Token::punct_substr_b};
+":)"	co_yield {Token::punct_substr_e};
+
+"."	co_yield {Token::op_dot};
+"^"	co_yield {Token::op_carat};
+"@"	co_yield {Token::op_at};
+"#"	co_yield {Token::op_hash};
+"|>"	co_yield {Token::op_pipe};
+
+"and"	co_yield {Token::op_and};
+"or"	co_yield {Token::op_or};
+"not"	co_yield {Token::op_not};
+"mod"	co_yield {Token::op_mod};
+"xor"	co_yield {Token::op_xor};
+"+"	co_yield {Token::op_plus};
+"-"	co_yield {Token::op_minus};
+"*"	co_yield {Token::op_times};
+"/"	co_yield {Token::op_div};
+"%"	co_yield {Token::op_rem};
+"+?"	co_yield {Token::op_qplus};
+"-?"	co_yield {Token::op_qminus};
+"+%"	co_yield {Token::op_wplus};
+"-%"	co_yield {Token::op_wminus};
+"&"	co_yield {Token::op_bitand};
+"|"	co_yield {Token::op_bitor};
+"<<"	co_yield {Token::op_lshift};
+">>"	co_yield {Token::op_rshift};
+"~"	co_yield {Token::op_compl};
+"=="	co_yield {Token::op_equal};
+"!="	co_yield {Token::op_unequal};
+"<=>"	co_yield {Token::op_cmp};
+"<="	co_yield {Token::op_lte};
+">="	co_yield {Token::op_gte};
+"<"	co_yield {Token::op_less};
+">"	co_yield {Token::op_greater};
+"??"	co_yield {Token::op_qmqm};
+"?"	co_yield {Token::op_qm};
 
 \w+
 
 \p{Unicode}
 .
+
+<<EOF>>	co_return;
 
 %%
