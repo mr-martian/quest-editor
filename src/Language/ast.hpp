@@ -34,11 +34,13 @@ class tokenizer {
 	Token expect(std::initializer_list<Token::Type> ts);
 
 	[[nodiscard]] Token peek() noexcept { return next; }
+	[[nodiscard]] Token cur() noexcept { return last; }
 	[[nodiscard]] bool check(Token::Type t) noexcept { return next.type == t; }
 	[[nodiscard]] bool check(std::initializer_list<Token::Type> ts) {
 		return std::find(begin(ts), end(ts), next.type) != end(ts);
 	}
 
+	tokenizer& ignore() noexcept;
 	tokenizer& ignore(Token::Type) noexcept;
 	tokenizer& ignore_consecutive(Token::Type t) noexcept;
 
@@ -46,9 +48,9 @@ class tokenizer {
 	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
 
  private:
-	std::istream* source{};
-	std::string buffer;
-	source_location buffer_pos;
+	Lexer _lex;
+	source_location _buffer_pos;
+
 	Token last{};
 	Token next{};
 
@@ -112,11 +114,11 @@ class BuiltinTypeID : public ExprAST {
 
 class IntegerTypeID : public BuiltinTypeID {
  public:
-	Integer _width;
+	Integer _width{};
 };
 class UnsignedTypeID : public BuiltinTypeID {
  public:
-	Integer _width;
+	Integer _width{};
 };
 
 class OwnerTypeID : public BuiltinTypeID {
@@ -168,8 +170,8 @@ struct Discriminators {
 class DeclarationAST : virtual public ASTNode {
  public:
 	string _name;
-	bool _is_export;
-	Discriminators _synthesized_discriminators;
+	bool _is_export{};
+	Discriminators _synthesized_discriminators{};
 	string language;
 	virtual bool is_static_scope() const noexcept { return true; }
 };
@@ -182,8 +184,14 @@ class AliasDeclAST : public DeclarationAST {
 class VarDeclAST : public DeclarationAST {
  public:
 	unique_ptr<ExprAST> _type;
-	bool _is_mut;
+	bool _is_mut{};
+	bool _is_const{};
 	unique_ptr<ASTNode> _initializer;
+};
+
+class ExprListAST : public ASTNode {
+ public:
+	vector<unique_ptr<ExprAST>> _elems;
 };
 
 class NamespaceAST : public DeclarationAST {
@@ -210,8 +218,8 @@ class NameAST : public ExprAST {
 
 class OperatorAST : public NameAST {
  public:
-	Direction _assoc;
-	Direction _eval_order;
+	Direction _assoc{};
+	Direction _eval_order{};
 };
 
 class LiteralAST : public ExprAST {
@@ -272,7 +280,7 @@ class ControlExprAST : public ExprAST {};
 class IfExpression : public ControlExprAST {
  public:
 	unique_ptr<ExprAST> _condition;
-	bool _target;
+	bool _target{};
 	unique_ptr<BlockAST> _true_body;
 	unique_ptr<ExprAST> _false_body;
 };
@@ -281,7 +289,7 @@ class InvertedIfExprAST : public ControlExprAST {
  public:
 	unique_ptr<ExprAST> _body;
 	unique_ptr<ExprAST> _condition;
-	bool _target;
+	bool _target{};
 };
 
 class LoopExprAST : public ControlExprAST {
@@ -293,21 +301,21 @@ class LoopExprAST : public ControlExprAST {
 class WhileExprAST : public LoopExprAST {
  public:
 	unique_ptr<ExprAST> _condition;
-	bool _target;
+	bool _target{};
 	unique_ptr<ExprAST> _else;
 };
 
 class DoWhileExprAST : public LoopExprAST {
  public:
 	unique_ptr<ExprAST> _condition;
-	bool _target;
+	bool _target{};
 	unique_ptr<ExprAST> _else;
 };
 
 class ForLoopExpr : public LoopExprAST {
  public:
 	unique_ptr<VarDeclAST> _induction_variable;
-	bool _is_mut;
+	bool _is_mut{};
 };
 
 class ForInExprAST : public ForLoopExpr {
@@ -323,7 +331,7 @@ class ForRangeExprAST : public ForLoopExpr {
 class GForExprAST : public ForLoopExpr {
  public:
 	unique_ptr<ExprAST> _condition;
-	bool _target;
+	bool _target{};
 	unique_ptr<ExprAST> _update;
 };
 
@@ -349,7 +357,7 @@ class PrototypeAST
     : public DeclarationAST
     , public ExprAST {
  public:
-	bool _is_proc;
+	bool _is_proc{};
 	optional<string> _linkage;
 	unique_ptr<SignatureAST> _signature;
 
@@ -376,16 +384,16 @@ class DataMemberDeclAST
     : public StructMemberAST
     , public VarDeclAST {
  public:
-	Protection _read;
-	Protection _mut;
+	Protection _read{};
+	Protection _mut{};
 };
 
 class FunctionMemberDeclAST
     : public StructMemberAST
     , public PrototypeAST {
  public:
-	Protection _access;
-	bool _is_default;
+	Protection _access{};
+	bool _is_default{};
 	using PrototypeAST::is_static_scope;
 };
 
@@ -411,7 +419,7 @@ class TraitDeclAST : public DeclarationAST {
 
 class FunctionDefAST : public PrototypeAST {
  public:
-	bool _is_simple;
+	bool _is_simple{};
 	optional<string> _delete_expr;
 	unique_ptr<ASTNode> _body;
 };

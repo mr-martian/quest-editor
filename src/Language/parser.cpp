@@ -200,4 +200,39 @@ auto parse_decl(tokenizer& tk, const DeclarationAST& outer)
 	return decl;
 }
 
+auto parse_initializer(tokenizer& tk, const Discriminators& context)
+    -> unique_ptr<ASTNode> {
+	if (tk.gettok_if(Token::punct_equal)) {
+		return parse_expr(tk, context);
+	} else {
+		tk.expect(Token::punct_lbrace);
+		auto list = std::make_unique<ExprListAST>();
+		while (not tk.gettok_if(Token::punct_rbrace)) {
+			list->_elems.push_back(parse_expr(tk, context));
+		}
+		return list;
+	}
+}
+
+auto parse_var_decl(tokenizer& tk, const Discriminators& context)
+    -> unique_ptr<VarDeclAST> {
+	tk.expect(Token::kw_let);
+	auto decl = std::make_unique<VarDeclAST>();
+
+	if (tk.gettok_if(Token::kw_mut)) {
+		decl->_is_mut = true;
+	} else if (tk.gettok_if(Token::kw_const)) {
+		decl->_is_const = true;
+	}
+	decl->_name = tk.expect(Token::identifier).str;
+	if (tk.gettok_if(Token::punct_colon)) {
+		decl->_type = parse_expr(tk, context);
+	}
+	if (not tk.gettok_if(Token::punct_semi)) {
+		decl->_initializer = parse_initializer(tk, context);
+		tk.expect(Token::punct_semi);
+	}
+	return decl;
+}
+
 } // namespace AST

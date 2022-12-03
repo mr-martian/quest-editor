@@ -8,8 +8,8 @@
 #include <istream>
 
 tokenizer::tokenizer(std::istream& in, const char* filename, bool l)
-    : source{&in}
-    , buffer_pos{filename}
+    : _lex{in}
+    , _buffer_pos{filename}
     , line_mode{l} {
 	advance();
 }
@@ -47,6 +47,10 @@ Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
 	}
 }
 
+tokenizer& tokenizer::ignore() noexcept {
+	advance();
+	return *this;
+}
 tokenizer& tokenizer::ignore(const Token::Type t) noexcept {
 	if (t != Token::eof and next.type == t) {
 		advance();
@@ -61,23 +65,4 @@ tokenizer& tokenizer::ignore_consecutive(const Token::Type t) noexcept {
 	return *this;
 }
 
-Token tokenizer::read() {
-	if (buffer.empty()) {
-		if (not *source) {
-			return Token{Token::eof, "end of file"};
-		} else {
-			auto old_pos = buffer_pos;
-			std::getline(*source, buffer, '\n');
-			++buffer_pos.line;
-			buffer_pos.col = 0;
-			if (line_mode) {
-				return {Token::punct_newline, ""};
-			} else {
-				return read();
-			}
-		}
-	} else {
-		// run tokenizer here
-		return {};
-	}
-}
+Token tokenizer::read() {}

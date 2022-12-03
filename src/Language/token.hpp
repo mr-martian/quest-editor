@@ -138,6 +138,7 @@ struct Token {
 		kw_fn,
 		kw_proc,
 		kw_let,
+		kw_const,
 		kw_mut,
 		kw_struct,
 		kw_trait,
