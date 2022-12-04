@@ -126,9 +126,6 @@ struct Token {
 		kw_true,
 		kw_false,
 
-		id_int,      // i##
-		id_unsigned, // u##
-
 		kw_module,
 		kw_export,
 		kw_import,
@@ -145,6 +142,7 @@ struct Token {
 		kw_extern,
 		kw_namespace,
 		kw_substrate,
+		kw_llvm,
 
 		kw_await,
 		kw_break,
@@ -178,6 +176,9 @@ struct Token {
 
 		kw_underscore, // _
 
+		id_int,      // i##
+		id_unsigned, // u##
+
 		reserved_id, // __.*
 		placeholder, // _[0-9]+
 
@@ -193,21 +194,37 @@ struct Token {
 	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
 };
 
+enum class token_class {
+	eof = -1,
+	unknown = 0,
+	literal,
+	punct,
+	op,
+	keyword,
+	identifier,
+	special,
+};
+token_class tok_classify(Token::Type t);
 std::string tok_name(Token::Type t);
+
 class unexpected : std::invalid_argument {
  public:
 	Token found;
-	Token::Type expected;
+	std::string expected;
 
-	static std::string str(Token found, Token::Type expected) {
+	static std::string str(Token found, std::string expected) {
 		using namespace std::literals;
-		return "expected "s + tok_name(expected) + "before " + found.str;
+		return "expected "s + expected + "before " + found.str;
 	}
 
 	unexpected(const Token& found, Token::Type expected)
 	    : std::invalid_argument(str(found, expected))
 	    , found(found)
-	    , expected(expected) {}
+	    , expected(tok_name(expected)) {}
+	unexpected(const Token& found, std::string expected)
+	    : std::invalid_argument(str(found, expected))
+	    , found(found)
+	    , expected(std::move(expected)) {}
 };
 
 #endif // TOKEN_HPP

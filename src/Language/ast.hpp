@@ -7,7 +7,8 @@
 #ifndef AST_HPP
 #define AST_HPP
 
-#include LEX_HEADER
+#include "lex.yy.h"
+#include "token.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -22,46 +23,56 @@
 #include <vector>
 
 class tokenizer {
- public:
-	tokenizer(std::istream& is, const char* filename, bool l = false);
+	using generator_type = asyncpp::generator<Token>;
 
-	[[nodiscard]] Token gettok() noexcept;
-	[[nodiscard]] std::optional<Token> gettok_if(Token::Type t) noexcept;
+ public:
+	tokenizer(std::istream& is, std::string filename, bool l = false);
+
+	[[nodiscard]] Token gettok() {
+		advance();
+		return last;
+	}
+	[[nodiscard]] std::optional<Token> gettok_if(Token::Type t);
 	[[nodiscard]] std::optional<Token> gettok_if(
-	    std::initializer_list<Token::Type> ts) noexcept;
+	    std::initializer_list<Token::Type> ts);
 
 	Token expect(Token::Type t);
 	Token expect(std::initializer_list<Token::Type> ts);
 
-	[[nodiscard]] Token peek() noexcept { return next; }
-	[[nodiscard]] Token cur() noexcept { return last; }
+	[[nodiscard]] Token peek() { return next; }
+	[[nodiscard]] Token cur() { return last; }
+
 	[[nodiscard]] bool check(Token::Type t) noexcept { return next.type == t; }
-	[[nodiscard]] bool check(std::initializer_list<Token::Type> ts) {
+	[[nodiscard]] bool check(std::initializer_list<Token::Type> ts) noexcept {
 		return std::find(begin(ts), end(ts), next.type) != end(ts);
 	}
 
-	tokenizer& ignore() noexcept;
-	tokenizer& ignore(Token::Type) noexcept;
-	tokenizer& ignore_consecutive(Token::Type t) noexcept;
+	tokenizer& ignore() {
+		advance();
+		return *this;
+	}
+	tokenizer& ignore(Token::Type);
+	tokenizer& ignore_consecutive(Token::Type t);
 
 	[[nodiscard]] bool good() const noexcept { return last.good(); }
 	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
-
- private:
-	Lexer _lex;
-	source_location _buffer_pos;
-
-	Token last{};
-	Token next{};
-
-	Token read();
-	void advance();
 
  public:
 	// If true, the Token::punct_newline token will be returned for the end of
 	// each line, as well as immediately preceeding EOF. Otherwise, newlines are
 	// considered whitespace and discarded.
 	bool line_mode{};
+
+ private:
+	Lexer _lex;
+	generator_type _c;
+	generator_type::iterator _cur;
+	decltype(_c.end()) _end;
+
+	Token last{};
+	Token next{};
+
+	void advance();
 };
 
 namespace AST {

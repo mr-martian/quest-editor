@@ -39,8 +39,8 @@ endif()
 
 add_executable(ast_generator ast_generator.cpp)
 
-add_executable(interpreter interpreter.cpp parser.cpp lex.yy.cpp ast.hpp
-	token.hpp tokenizer.cpp)
+add_executable(interpreter interpreter.cpp parser.cpp ast.hpp
+	token.hpp tokenizer.cpp lex.yy.cpp lex.yy.h)
 
 add_compile_definitions(
 	"TOKEN_HEADER=<${CMAKE_SOURCE_DIR}/src/Language/token.hpp>"
@@ -55,15 +55,21 @@ target_link_libraries(interpreter PUBLIC
 
 # used to add non-installed libraries
 target_include_directories(interpreter
-	SYSTEM PUBLIC "${EXTRA_INCLUDES}")
+	SYSTEM PUBLIC "${EXTRA_INCLUDES}"
+	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 find_program(REFLEX reflex)
 add_custom_command(OUTPUT lex.yy.cpp lex.yy.h
 	COMMAND "${REFLEX}" --header-file ${CMAKE_SOURCE_DIR}/src/Language/vellum.l
 	MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/src/Language/vellum.l)
 target_sources(interpreter PRIVATE vellum.l spec.ebnf precedence.txt)
+#target_sources(interpreter PRIVATE
+#	$<TARGET_FILE_DIR:interpreter>/lex.yy.h
+#	$<TARGET_FILE_DIR:interpreter>/lex.yy.cpp)
 
 source_group(lex REGULAR_EXPRESSION ".*\.l")
+source_group(gen REGULAR_EXPRESSION ".*\.yy\..*")
 
 source_group(vellum REGULAR_EXPRESSION ".*\.vll")
 

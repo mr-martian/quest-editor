@@ -4,6 +4,9 @@
 %option token-type="asyncpp::generator<Token>"
 %option exception="std::invalid_argument(\"Scanner jammed\")"
 
+%option ctorarg="std::string filename"
+//%option ctorinit="_filename(std::move(filename))"
+
 %top{
 #include TOKEN_HEADER
 //#include <coroutine>
@@ -14,10 +17,11 @@
 
 %class{
 
+      std::string _filename;
 %}
 
 %init{
-	
+	_filename = std::move(filename);
 %}
 
 literal_int (0[xob])?[0-9]+

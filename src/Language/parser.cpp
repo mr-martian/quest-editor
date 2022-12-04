@@ -235,4 +235,81 @@ auto parse_var_decl(tokenizer& tk, const Discriminators& context)
 	return decl;
 }
 
+auto parse_control_expr(tokenizer& tk, const Discriminators& context)
+    -> unique_ptr<ExprAST>;
+auto parse_assignment_expr(tokenizer& tk, const Discriminators& context)
+    -> unique_ptr<ExprAST>;
+auto parse_block(tokenizer& tk, const Discriminators& context)
+    -> unique_ptr<ExprAST>;
+
+auto parse_expr(tokenizer& tk, const Discriminators& context)
+    -> unique_ptr<ExprAST> {
+	switch (tok_classify(tk.cur().type)) {
+	case token_class::eof:
+	case token_class::unknown: {
+		throw unexpected(tk.cur(), "expression");
+	} break;
+	case token_class::literal:
+	case token_class::identifier: {
+
+	} break;
+	case token_class::punct: {
+		switch (tk.cur().type) {
+		case Token::punct_lbrace: {
+			parse_block(tk, context);
+		} break;
+		case Token::punct_lbrck: {
+
+		} break;
+		case Token::punct_lparen: {
+
+		} break;
+		case Token::punct_scope: {
+
+		} break;
+		case Token::punct_substr_b: {
+
+		} break;
+		case Token::punct_attr: {
+
+		} break;
+		default:
+			throw unexpected(tk.cur(), "expression");
+		}
+	} break;
+	case token_class::op: {
+
+	} break;
+	case token_class::keyword: {
+		// left corners of control_expr, excepting if-expressions and short-form
+		// substrate-expressions
+		switch (tk.cur().type) {
+		case Token::kw_await:
+		case Token::kw_break:
+		case Token::kw_continue:
+		case Token::kw_do:
+		case Token::kw_for:
+		case Token::kw_if:
+		case Token::kw_llvm:
+		case Token::kw_loop:
+		case Token::kw_match:
+		case Token::kw_result:
+		case Token::kw_return:
+		case Token::kw_substrate:
+		case Token::kw_unless:
+		case Token::kw_until:
+		case Token::kw_while:
+		case Token::kw_yield: {
+			return parse_control_expr(tk, context);
+		} break;
+		default:
+			parse_assignment_expr(tk, context);
+		}
+	} break;
+	case token_class::special: {
+
+	} break;
+	}
+}
+
 } // namespace AST
