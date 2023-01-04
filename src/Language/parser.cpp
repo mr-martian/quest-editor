@@ -18,8 +18,8 @@ auto make_unique_for_modify(std::unique_ptr<Base>& owner, Args&&... args) {
 
 namespace AST {
 
-auto parse_qualified_name(tokenizer& tk) -> unique_ptr<NameAST> {
-	auto name = std::make_unique<NameAST>();
+auto parse_qualified_name(tokenizer& tk) -> unique_ptr<Name> {
+	auto name = std::make_unique<Name>();
 	if (tk.gettok_if(Token::kw_Bool)) {
 		if (tk.gettok_if(Token::punct_scope)) {
 			auto val = tk.expect({Token::kw_true, Token::kw_false});
@@ -48,37 +48,43 @@ auto parse_qualified_name(tokenizer& tk) -> unique_ptr<NameAST> {
 	}
 }
 
-auto parse_decl(tokenizer& tk, const DeclarationAST& context)
-    -> unique_ptr<DeclarationAST>;
+auto parse_decl(tokenizer& tk, const Declaration& context)
+    -> unique_ptr<Declaration>;
 auto parse_var_decl(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<VarDeclAST>;
+    -> unique_ptr<VarDecl>;
 auto parse_fn_decl(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<PrototypeAST>;
+    -> unique_ptr<Prototype>;
 auto parse_enum_decl(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<EnumDeclAST>;
+    -> unique_ptr<EnumDecl> {
+	throw 0;
+}
 auto parse_struct_decl(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<StructProtoAST>;
+    -> unique_ptr<StructProto> {
+	throw 0;
+}
 auto parse_trait_decl(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<TraitDeclAST>;
+    -> unique_ptr<TraitDecl> {
+	throw 0;
+}
 
 auto parse_expr(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<ExprAST>;
+    -> unique_ptr<Expr>;
 
-auto parse_module_def(tokenizer& tk) -> unique_ptr<ModuleAST>;
-auto parse_ns_decl_seq(tokenizer& tk, const DeclarationAST& context)
-    -> vector<unique_ptr<DeclarationAST>> {
-	vector<unique_ptr<DeclarationAST>> decls;
+auto parse_module_def(tokenizer& tk) -> unique_ptr<Module>;
+auto parse_ns_decl_seq(tokenizer& tk, const Declaration& context)
+    -> vector<unique_ptr<Declaration>> {
+	vector<unique_ptr<Declaration>> decls;
 
 	while (tk and not tk.check(Token::punct_rbrace)) {
 		decls.push_back(parse_decl(tk, context));
 	}
 	return decls;
 }
-auto parse_namespace_block(tokenizer& tk, const DeclarationAST& outer)
-    -> unique_ptr<NamespaceAST> {
+auto parse_namespace_block(tokenizer& tk, const Declaration& outer)
+    -> unique_ptr<Namespace> {
 	const auto& context = outer._synthesized_discriminators;
 	tk.expect(Token::kw_namespace);
-	auto decl = std::make_unique<NamespaceAST>();
+	auto decl = std::make_unique<Namespace>();
 	decl->language = outer.language;
 	decl->_name = tk.expect(Token::identifier).str;
 	auto& scope = decl->_synthesized_discriminators.scope;
@@ -97,8 +103,8 @@ auto parse_namespace_block(tokenizer& tk, const DeclarationAST& outer)
 	return decl;
 }
 
-auto parse_module(tokenizer& tk) -> unique_ptr<ModuleAST> {
-	unique_ptr<ModuleAST> root;
+auto parse_module(tokenizer& tk) -> unique_ptr<Module> {
+	unique_ptr<Module> root;
 	if (tk.peek().type == Token::kw_export
 	    or tk.peek().type == Token::kw_module) {
 		root = parse_module_def(tk);
@@ -110,8 +116,8 @@ auto parse_module(tokenizer& tk) -> unique_ptr<ModuleAST> {
 	return root;
 }
 
-auto parse_module_def(tokenizer& tk) -> unique_ptr<ModuleAST> {
-	auto root = std::make_unique<ModuleAST>();
+auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
+	auto root = std::make_unique<Module>();
 	{
 		const auto tok = tk.gettok();
 		switch (tok.type) {
@@ -136,10 +142,10 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<ModuleAST> {
 	return root;
 }
 
-auto parse_extern_decl(tokenizer& tk, const DeclarationAST& outer)
-    -> unique_ptr<DeclarationAST> {
+auto parse_extern_decl(tokenizer& tk, const Declaration& outer)
+    -> unique_ptr<Declaration> {
 	const auto& context = outer._synthesized_discriminators;
-	unique_ptr<DeclarationAST> decl;
+	unique_ptr<Declaration> decl;
 	string language = tk.gettok_if(Token::literal_string)
 	                      .value_or(Token{Token::literal_string, outer.language})
 	                      .str;
@@ -147,7 +153,7 @@ auto parse_extern_decl(tokenizer& tk, const DeclarationAST& outer)
 		decl = parse_fn_decl(tk, context);
 		decl->language = language;
 	} else if (tk.gettok_if(Token::punct_lbrace)) {
-		auto alias = make_unique_for_modify<NamespaceAST>(decl);
+		auto alias = make_unique_for_modify<Namespace>(decl);
 		alias->_synthesized_discriminators.scope = context.scope;
 		alias->language = language;
 		alias->_declarations = parse_ns_decl_seq(tk, *alias);
@@ -156,17 +162,17 @@ auto parse_extern_decl(tokenizer& tk, const DeclarationAST& outer)
 	return decl;
 }
 
-auto parse_decl(tokenizer& tk, const DeclarationAST& outer)
-    -> unique_ptr<DeclarationAST> {
+auto parse_decl(tokenizer& tk, const Declaration& outer)
+    -> unique_ptr<Declaration> {
 	const auto& context = outer._synthesized_discriminators;
-	unique_ptr<DeclarationAST> decl;
+	unique_ptr<Declaration> decl;
 	bool is_export = tk.gettok_if(Token::kw_export).has_value();
 	switch (tk.peek().type) {
 	case Token::kw_let: {
 		decl = parse_var_decl(tk, context);
 	} break;
 	case Token::kw_alias: {
-		auto alias = make_unique_for_modify<AliasDeclAST>(decl);
+		auto alias = make_unique_for_modify<AliasDecl>(decl);
 		alias->_synthesized_discriminators.scope = context.scope;
 		// parse alias declaration
 		alias->_name = tk.expect(Token::identifier).str;
@@ -176,7 +182,9 @@ auto parse_decl(tokenizer& tk, const DeclarationAST& outer)
 	case Token::kw_fn:
 	case Token::kw_proc: {
 		decl = parse_fn_decl(tk, context);
-		decl->language = outer.language;
+		if (decl->language.empty()) {
+			decl->language = outer.language;
+		}
 	} break;
 	case Token::kw_enum: {
 		decl = parse_enum_decl(tk, context);
@@ -201,12 +209,12 @@ auto parse_decl(tokenizer& tk, const DeclarationAST& outer)
 }
 
 auto parse_initializer(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<ASTNode> {
+    -> unique_ptr<Node> {
 	if (tk.gettok_if(Token::punct_equal)) {
 		return parse_expr(tk, context);
 	} else {
 		tk.expect(Token::punct_lbrace);
-		auto list = std::make_unique<ExprListAST>();
+		auto list = std::make_unique<ExprList>();
 		while (not tk.gettok_if(Token::punct_rbrace)) {
 			list->_elems.push_back(parse_expr(tk, context));
 		}
@@ -215,9 +223,9 @@ auto parse_initializer(tokenizer& tk, const Discriminators& context)
 }
 
 auto parse_var_decl(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<VarDeclAST> {
+    -> unique_ptr<VarDecl> {
 	tk.expect(Token::kw_let);
-	auto decl = std::make_unique<VarDeclAST>();
+	auto decl = std::make_unique<VarDecl>();
 
 	if (tk.gettok_if(Token::kw_mut)) {
 		decl->_is_mut = true;
@@ -235,15 +243,46 @@ auto parse_var_decl(tokenizer& tk, const Discriminators& context)
 	return decl;
 }
 
+auto parse_fn_args(tokenizer& tk, const Discriminators& context)
+    -> vector<unique_ptr<Expr>> {
+	throw 0;
+}
+
+auto parse_fn_decl(tokenizer& tk, const Discriminators& context)
+    -> unique_ptr<Prototype> {
+	auto decl = std::make_unique<Prototype>();
+	if (tk.gettok_if(Token::kw_fn)) {
+		decl->_is_proc = false;
+	} else if (tk.expect(Token::kw_proc)) {
+		decl->_is_proc = true;
+	}
+	if (tk.gettok_if(Token::op_bitand)) {
+		decl->_signature->_captures.emplace<Signature::ref_tag_t>();
+	} else if (tk.gettok_if(Token::punct_lbrace)) {
+		throw 0;
+	} else {
+		decl->_name = tk.expect(Token::identifier).str;
+	}
+	decl->_signature->_args
+	    = parse_fn_args(tk, decl->_synthesized_discriminators);
+	throw 0;
+}
+
 auto parse_control_expr(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<ExprAST>;
+    -> unique_ptr<Expr> {
+	throw 0;
+}
 auto parse_assignment_expr(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<ExprAST>;
+    -> unique_ptr<Expr> {
+	throw 0;
+}
 auto parse_block(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<ExprAST>;
+    -> unique_ptr<Expr> {
+	throw 0;
+}
 
 auto parse_expr(tokenizer& tk, const Discriminators& context)
-    -> unique_ptr<ExprAST> {
+    -> unique_ptr<Expr> {
 	switch (tok_classify(tk.cur().type)) {
 	case token_class::eof:
 	case token_class::unknown: {
@@ -310,6 +349,7 @@ auto parse_expr(tokenizer& tk, const Discriminators& context)
 
 	} break;
 	}
+	throw 0;
 }
 
 } // namespace AST

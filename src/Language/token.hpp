@@ -19,6 +19,7 @@
 #define TOKEN_HPP
 
 #include <stdexcept>
+#include <utility>
 
 struct source_location {
 	const char* filename{};
@@ -195,16 +196,43 @@ struct Token {
 };
 
 enum class token_class {
-	eof = -1,
-	unknown = 0,
+	unknown,
 	literal,
 	punct,
 	op,
 	keyword,
 	identifier,
 	special,
+	eof,
 };
-token_class tok_classify(Token::Type t);
+constexpr token_class tok_classify(Token::Type t) {
+	auto in_range_i = [](auto v, std::pair<Token::Type, Token::Type> r) {
+		return (r.first <= v) and (v <= r.second);
+	};
+	auto v = static_cast<std::underlying_type_t<Token::Type>>(t);
+	if (v == Token::eof) {
+		return token_class::eof;
+	} else if (v == Token::unknown) {
+		return token_class::unknown;
+	} else if (in_range_i(v, {Token::literal_int, Token::literal_string})) {
+		return token_class::literal;
+	} else if (in_range_i(v, {Token::punct_lbrace, Token::punct_substr_e})) {
+		return token_class::punct;
+	} else if (in_range_i(v, {Token::op_dot, Token::op_xor})) {
+		return token_class::op;
+	} else if (in_range_i(v, {Token::kw_Bool, Token::kw_underscore})) {
+		return token_class::keyword;
+	} else if (v == Token::id_int or v == Token::id_unsigned) {
+		return token_class::special;
+	} else if (v == Token::reserved_id or v == Token::placeholder) {
+		return token_class::special;
+	} else if (v == Token::identifier) {
+		return token_class::identifier;
+	} else {
+		return token_class::unknown;
+	}
+	// no return here to ensure warning if not all cases covered
+}
 std::string tok_name(Token::Type t);
 
 class unexpected : std::invalid_argument {
@@ -218,7 +246,7 @@ class unexpected : std::invalid_argument {
 	}
 
 	unexpected(const Token& found, Token::Type expected)
-	    : std::invalid_argument(str(found, expected))
+	    : std::invalid_argument(str(found, tok_name(expected)))
 	    , found(found)
 	    , expected(tok_name(expected)) {}
 	unexpected(const Token& found, std::string expected)

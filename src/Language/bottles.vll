@@ -1,0 +1,60 @@
+module demos;
+
+import std;
+
+// Hello world is simple:
+/*
+proc main(argv, mut stdio)
+	= stdio.out.print("Hello, world!");
+*/
+
+// Structured syntax
+fn format_verse_s(count)
+	= "{1} bottles of beer on the wall. {1} bottles of beer.\nTake one down, pass it around, {2} bottles of beer on the wall.\n".format(count, count - 1);
+
+proc sing_s(mut out) {
+	for count = 99 -> 1 {
+		out.print(format_verse_s(count));
+	}
+	out.print("No more bottles of beer on the wall, no more bottles of beer.\n");
+	out.print("Go to the store and buy some more, 99 bottles of beer on the wall...\n");
+}
+
+// Substrate syntax
+fn format_verse_c(count) = (:
+	"{1} bottles of beer on the wall. {1} bottles of beer.\nTake one down, pass it around, {2} bottles of beer on the wall.\n" count count 1 - format!3
+:);
+
+proc sing_c(mut out) = (:
+	99 1 std::seq {out swap format_verse_c print} std::map
+	out "No more bottles of beer on the wall, no more bottles of beer.\nGo to the store and buy some more, 99 bottles of beer on the wall...\n" print
+:);
+
+
+
+proc main(argv, mut stdio) {
+	sing_s(stdio.out);
+	sing_c(stdio.out);
+}
+
+fn fun(x) = sqrt(abs(x)) + 5 * x.pow(3);
+
+proc tpk(&mut in, &mut out) {
+	let mut a : [11]f64;
+	for &mut v in a {
+		in.parse(&v) ?? die("Invalid input (expected number)\n")
+	}
+	for i,v in rev(enumerate(a)) {
+		let y = fun(v);
+		if y > 400 {
+			out.print("{} TOO LARGE\n".format(i))
+		} else {
+			out.print("{} {}\n".format(i, y))
+		}
+	}
+}
+
+proc tpk_c(&mut in, &mut out) = (:
+	(let mut a : [11]f64)
+	0 11 std::seq ( v -> ){  }
+:);

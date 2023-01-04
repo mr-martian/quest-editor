@@ -40,26 +40,31 @@ endif()
 add_executable(ast_generator ast_generator.cpp)
 
 add_executable(interpreter interpreter.cpp parser.cpp ast.hpp
-	token.hpp tokenizer.cpp lex.yy.cpp lex.yy.h)
+	token.hpp tokenizer.cpp ast.cpp lex.yy.cpp lex.yy.h)
 
 add_compile_definitions(
 	"TOKEN_HEADER=<${CMAKE_SOURCE_DIR}/src/Language/token.hpp>"
 	"LEX_HEADER=<$<TARGET_FILE_DIR:interpreter>/lex.yy.h>")
 
+find_program(REFLEX reflex)
+find_library(LREFLEX reflex)
 target_link_libraries(interpreter PUBLIC
-	reflex
+	"${LREFLEX}"
 	LLVMCore LLVMRemarks LLVMBitstreamReader
 	LLVMBinaryFormat LLVMSupport LLVMDemangle
 	rt dl tinfo pthread m
 	"${EXTRA_LIBS}")
 
 # used to add non-installed libraries
+target_include_directories(ast_generator
+	SYSTEM PUBLIC "${EXTRA_INCLUDES}"
+	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(interpreter
 	SYSTEM PUBLIC "${EXTRA_INCLUDES}"
 	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
-find_program(REFLEX reflex)
 add_custom_command(OUTPUT lex.yy.cpp lex.yy.h
 	COMMAND "${REFLEX}" --header-file ${CMAKE_SOURCE_DIR}/src/Language/vellum.l
 	MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/src/Language/vellum.l)
@@ -75,4 +80,4 @@ source_group(vellum REGULAR_EXPRESSION ".*\.vll")
 
 add_custom_target(sources ALL
 	DEPENDS interpreter
-	SOURCES "loc_stats.vll" "traits_compare.vll")
+	SOURCES "loc_stats.vll" "traits_compare.vll" "bottles.vll" "containers.vll")

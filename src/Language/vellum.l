@@ -4,7 +4,7 @@
 %option token-type="asyncpp::generator<Token>"
 %option exception="std::invalid_argument(\"Scanner jammed\")"
 
-%option ctorarg="std::string filename"
+%option ctorarg="std::string filename, bool newline_mode"
 //%option ctorinit="_filename(std::move(filename))"
 
 %top{
@@ -17,23 +17,28 @@
 
 %class{
 
+      public:
       std::string _filename;
+      bool _newline_mode;
 %}
 
 %init{
 	_filename = std::move(filename);
+	_newline_mode = newline_mode;
 %}
 
 literal_int (0[xob])?[0-9]+
 decimal_int [0-9]+
 literal_float	[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?
 
+identifier	\p{Letter}[\p{Letter}\p{Digit}_]*
+
 %x COMMENT
 
 %%
 
 
-\n		co_yield {Token::punct_newline};
+\n		if (_newline_mode) { co_yield {Token::punct_newline}; }
 \p{Space}+	
 
 "/*"	start(COMMENT);
@@ -43,6 +48,7 @@ literal_float	[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?
 "*"+[^*/]*	// ignore *s not followed by /
 <<EOF>>	lexer_error("Block comment not ended before end of file"); co_return;
 }
+"//"[^\n]*
 
 {literal_int}	co_yield {Token::literal_int, str()};
 {literal_float}	co_yield {Token::literal_float, str()};
@@ -169,6 +175,7 @@ literal_float	[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?
 "~"	co_yield {Token::op_compl};
 "=="	co_yield {Token::op_equal};
 "!="	co_yield {Token::op_unequal};
+"<>"	co_yield {Token::op_unequal};
 "<=>"	co_yield {Token::op_cmp};
 "<="	co_yield {Token::op_lte};
 ">="	co_yield {Token::op_gte};
@@ -177,10 +184,10 @@ literal_float	[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?
 "??"	co_yield {Token::op_qmqm};
 "?"	co_yield {Token::op_qm};
 
-\w+
+{identifier}	co_yield {Token::identifier, str()};
 
-\p{Unicode}
-.
+\p{Unicode}	co_yield {Token::unknown, str()};
+.	co_yield {Token::unknown, str()};
 
 <<EOF>>	co_return;
 

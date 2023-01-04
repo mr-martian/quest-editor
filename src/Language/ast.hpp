@@ -61,7 +61,9 @@ class tokenizer {
 	// If true, the Token::punct_newline token will be returned for the end of
 	// each line, as well as immediately preceeding EOF. Otherwise, newlines are
 	// considered whitespace and discarded.
-	bool line_mode{};
+	// bool line_mode{};
+	bool newline_mode() { return _lex._newline_mode; }
+	void newline_mode(bool mode) { _lex._newline_mode = mode; }
 
  private:
 	Lexer _lex;
@@ -89,32 +91,32 @@ using set = std::unordered_set<K, Ts...>;
 
 class SubstrateNode;
 
-class ASTNode {
+class Node {
  public:
-	ASTNode() = default;
-	ASTNode(const ASTNode&) = delete;
-	ASTNode(ASTNode&&) = delete;
-	ASTNode& operator=(const ASTNode&) = delete;
-	ASTNode& operator=(ASTNode&&) = delete;
+	Node() = default;
+	Node(const Node&) = delete;
+	Node(Node&&) = delete;
+	Node& operator=(const Node&) = delete;
+	Node& operator=(Node&&) = delete;
 
 	virtual unique_ptr<SubstrateNode> substrate() const;
 	virtual std::ostream& pretty_print(std::ostream& os) const;
 
-	virtual ~ASTNode() = default;
+	virtual ~Node() = default;
 
-	vector<unique_ptr<ASTNode>> _attributes;
+	vector<unique_ptr<Node>> _attributes;
 };
 
-class ExprAST : virtual public ASTNode {
+class Expr : virtual public Node {
  public:
-	unique_ptr<ExprAST> _type;
+	unique_ptr<Expr> _type;
 };
 
 /*
  * Type Expressions
  */
 
-class BuiltinTypeID : public ExprAST {
+class BuiltinTypeID : public Expr {
  public:
 	BuiltinTypeID() = default;
 	BuiltinTypeID(std::string name)
@@ -134,51 +136,54 @@ class UnsignedTypeID : public BuiltinTypeID {
 
 class OwnerTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<ExprAST> _owned_type;
+	unique_ptr<Expr> _owned_type;
 };
 class SharedTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<ExprAST> _owned_type;
+	unique_ptr<Expr> _owned_type;
 };
 class ArrayTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<ExprAST> _element_type;
+	unique_ptr<Expr> _element_type;
 	vector<optional<Integer>> _bounds;
 };
 
-class TupleTypeID : public ExprAST {
+class TupleTypeID : public Expr {
  public:
-	vector<unique_ptr<ExprAST>> _member_types;
+	vector<unique_ptr<Expr>> _member_types;
 };
-class UnionTypeID : public ExprAST {
+class UnionTypeID : public Expr {
  public:
-	set<unique_ptr<ExprAST>> _member_types;
+	set<unique_ptr<Expr>> _member_types;
 };
 
 class NoneTypeID : public TupleTypeID {};
 class NoreturnTypeID : public UnionTypeID {};
 class ThisTypeID : public BuiltinTypeID {};
 
-class TemplatedTypeID : public ExprAST {
+class TemplatedTypeID : public Expr {
  public:
-	vector<unique_ptr<ExprAST>> _args;
+	vector<unique_ptr<Expr>> _args;
 };
 
 /*
  * Simple Declarations
  */
 
-class SignatureAST : virtual public ASTNode {
-	vector<unique_ptr<ExprAST>> _args, _returns;
+class Signature : virtual public Node {
+ public:
+	vector<unique_ptr<Expr>> _args, _returns;
+	struct ref_tag_t {};
+	std::variant<std::monostate, ref_tag_t, vector<unique_ptr<Expr>>> _captures;
 };
 
 struct Discriminators {
 	vector<string> scope;
 	optional<Integer> args;
-	unique_ptr<SignatureAST> signature;
+	unique_ptr<Signature> signature;
 };
 
-class DeclarationAST : virtual public ASTNode {
+class Declaration : virtual public Node {
  public:
 	string _name;
 	bool _is_export{};
@@ -187,27 +192,27 @@ class DeclarationAST : virtual public ASTNode {
 	virtual bool is_static_scope() const noexcept { return true; }
 };
 
-class AliasDeclAST : public DeclarationAST {
+class AliasDecl : public Declaration {
  public:
-	unique_ptr<ExprAST> _type;
+	unique_ptr<Expr> _type;
 };
 
-class VarDeclAST : public DeclarationAST {
+class VarDecl : public Declaration {
  public:
-	unique_ptr<ExprAST> _type;
+	unique_ptr<Expr> _type;
 	bool _is_mut{};
 	bool _is_const{};
-	unique_ptr<ASTNode> _initializer;
+	unique_ptr<Node> _initializer;
 };
 
-class ExprListAST : public ASTNode {
+class ExprList : public Node {
  public:
-	vector<unique_ptr<ExprAST>> _elems;
+	vector<unique_ptr<Expr>> _elems;
 };
 
-class NamespaceAST : public DeclarationAST {
+class Namespace : public Declaration {
  public:
-	vector<unique_ptr<DeclarationAST>> _declarations;
+	vector<unique_ptr<Declaration>> _declarations;
 };
 
 /*
@@ -221,138 +226,138 @@ enum class Direction : unsigned short {
 	Either = Left | Right,
 };
 
-class NameAST : public ExprAST {
+class Name : public Expr {
  public:
 	string _basename;
 	Discriminators _discrim;
 };
 
-class OperatorAST : public NameAST {
+class Operator : public Name {
  public:
 	Direction _assoc{};
 	Direction _eval_order{};
 };
 
-class LiteralAST : public ExprAST {
+class Literal : public Expr {
  public:
 	string _text;
 };
 
-class IntegerLiteralAST : public LiteralAST {};
+class IntegerLiteral : public Literal {};
 
-class FloatLiteralAST : public LiteralAST {};
+class FloatLiteral : public Literal {};
 
-class StringLiteralAST : public LiteralAST {};
+class StringLiteral : public Literal {};
 
-class EnumeratorAST : public LiteralAST {
+class Enumerator : public Literal {
  public:
 	string _name;
-	unique_ptr<ExprAST> _value;
+	unique_ptr<Expr> _value;
 };
 
-class BoolKeywordAST : public EnumeratorAST {};
+class BoolKeyword : public Enumerator {};
 
 /*
  * Expressions / Statements
  */
 
-class UnaryExprAST : public ExprAST {
+class UnaryExpr : public Expr {
  public:
-	unique_ptr<OperatorAST> _op;
-	unique_ptr<ExprAST> _operand;
+	unique_ptr<Operator> _op;
+	unique_ptr<Expr> _operand;
 };
 
-class BinaryExprAST : public ExprAST {
+class BinaryExpr : public Expr {
  public:
-	unique_ptr<OperatorAST> _op;
-	unique_ptr<ExprAST> _left, _right;
+	unique_ptr<Operator> _op;
+	unique_ptr<Expr> _left, _right;
 };
 
-class CallExprAST : public ExprAST {
+class CallExpr : public Expr {
  public:
-	unique_ptr<ExprAST> _fun;
-	vector<unique_ptr<ExprAST>> _args;
+	unique_ptr<Expr> _fun;
+	vector<unique_ptr<Expr>> _args;
 };
 
-class RewriteExprAST : public ExprAST {
+class RewriteExpr : public Expr {
  public:
-	unique_ptr<ExprAST> _val;
-	unique_ptr<ExprAST> _pattern;
+	unique_ptr<Expr> _val;
+	unique_ptr<Expr> _pattern;
 };
 
-class BlockAST : public ExprAST {
-	vector<unique_ptr<ExprAST>> _expressions;
+class Block : public Expr {
+	vector<unique_ptr<Expr>> _expressions;
 };
 
-class AssignmentAST : public ExprAST {};
+class Assignment : public Expr {};
 
-class ControlExprAST : public ExprAST {};
+class ControlExpr : public Expr {};
 
-class IfExpression : public ControlExprAST {
+class IfExpression : public ControlExpr {
  public:
-	unique_ptr<ExprAST> _condition;
+	unique_ptr<Expr> _condition;
 	bool _target{};
-	unique_ptr<BlockAST> _true_body;
-	unique_ptr<ExprAST> _false_body;
+	unique_ptr<Block> _true_body;
+	unique_ptr<Expr> _false_body;
 };
 
-class InvertedIfExprAST : public ControlExprAST {
+class InvertedIfExpr : public ControlExpr {
  public:
-	unique_ptr<ExprAST> _body;
-	unique_ptr<ExprAST> _condition;
+	unique_ptr<Expr> _body;
+	unique_ptr<Expr> _condition;
 	bool _target{};
 };
 
-class LoopExprAST : public ControlExprAST {
+class LoopExpr : public ControlExpr {
  public:
 	optional<string> _label;
-	unique_ptr<BlockAST> _body;
+	unique_ptr<Block> _body;
 };
 
-class WhileExprAST : public LoopExprAST {
+class WhileExpr : public LoopExpr {
  public:
-	unique_ptr<ExprAST> _condition;
+	unique_ptr<Expr> _condition;
 	bool _target{};
-	unique_ptr<ExprAST> _else;
+	unique_ptr<Expr> _else;
 };
 
-class DoWhileExprAST : public LoopExprAST {
+class DoWhileExpr : public LoopExpr {
  public:
-	unique_ptr<ExprAST> _condition;
+	unique_ptr<Expr> _condition;
 	bool _target{};
-	unique_ptr<ExprAST> _else;
+	unique_ptr<Expr> _else;
 };
 
-class ForLoopExpr : public LoopExprAST {
+class ForLoopExpr : public LoopExpr {
  public:
-	unique_ptr<VarDeclAST> _induction_variable;
+	unique_ptr<VarDecl> _induction_variable;
 	bool _is_mut{};
 };
 
-class ForInExprAST : public ForLoopExpr {
+class ForInExpr : public ForLoopExpr {
  public:
-	unique_ptr<ExprAST> _range_expr;
+	unique_ptr<Expr> _range_expr;
 };
 
-class ForRangeExprAST : public ForLoopExpr {
-	unique_ptr<ExprAST> _r_begin, _r_end;
-	unique_ptr<ExprAST> _update;
+class ForRangeExpr : public ForLoopExpr {
+	unique_ptr<Expr> _r_begin, _r_end;
+	unique_ptr<Expr> _update;
 };
 
-class GForExprAST : public ForLoopExpr {
+class GForExpr : public ForLoopExpr {
  public:
-	unique_ptr<ExprAST> _condition;
+	unique_ptr<Expr> _condition;
 	bool _target{};
-	unique_ptr<ExprAST> _update;
+	unique_ptr<Expr> _update;
 };
 
-class MatchExprAST : public ControlExprAST {
+class MatchExpr : public ControlExpr {
  public:
 };
 
-class ResultExprAST
-    : public ControlExprAST
-    , public UnaryExprAST {
+class ResultExpr
+    : public ControlExpr
+    , public UnaryExpr {
  public:
 	string _result_keyword;
 	optional<string> _target_label;
@@ -362,15 +367,15 @@ class ResultExprAST
  * Complex Declarations
  */
 
-class ArgDeclAST : public VarDeclAST {};
+class ArgDecl : public VarDecl {};
 
-class PrototypeAST
-    : public DeclarationAST
-    , public ExprAST {
+class Prototype
+    : public Declaration
+    , public Expr {
  public:
 	bool _is_proc{};
 	optional<string> _linkage;
-	unique_ptr<SignatureAST> _signature;
+	unique_ptr<Signature> _signature;
 
 	bool is_static_scope() const noexcept override { return true; }
 };
@@ -382,62 +387,62 @@ enum class Protection {
 	Public,
 };
 
-class StructProtoAST
-    : public DeclarationAST
-    , public ExprAST {
+class StructProto
+    : public Declaration
+    , public Expr {
  public:
-	vector<unique_ptr<ArgDeclAST>> _args;
+	vector<unique_ptr<ArgDecl>> _args;
 };
 
-class StructMemberAST : public DeclarationAST {};
+class StructMember : public Declaration {};
 
-class DataMemberDeclAST
-    : public StructMemberAST
-    , public VarDeclAST {
+class DataMemberDecl
+    : public StructMember
+    , public VarDecl {
  public:
 	Protection _read{};
 	Protection _mut{};
 };
 
-class FunctionMemberDeclAST
-    : public StructMemberAST
-    , public PrototypeAST {
+class FunctionMemberDecl
+    : public StructMember
+    , public Prototype {
  public:
 	Protection _access{};
 	bool _is_default{};
-	using PrototypeAST::is_static_scope;
+	using Prototype::is_static_scope;
 };
 
-class StructTraitImpl : public StructMemberAST {};
+class StructTraitImpl : public StructMember {};
 
-class StructDefAST : public StructProtoAST {
+class StructDef : public StructProto {
  public:
-	vector<unique_ptr<DeclarationAST>> _members;
+	vector<unique_ptr<Declaration>> _members;
 };
 
-class EnumDeclAST
-    : public DeclarationAST
-    , public ExprAST {
+class EnumDecl
+    : public Declaration
+    , public Expr {
  public:
-	vector<unique_ptr<EnumeratorAST>> _enumerators;
+	vector<unique_ptr<Enumerator>> _enumerators;
 };
 
-class TraitDeclAST : public DeclarationAST {
+class TraitDecl : public Declaration {
  public:
-	vector<unique_ptr<ArgDeclAST>> _args;
-	vector<unique_ptr<FunctionMemberDeclAST>> _members;
+	vector<unique_ptr<ArgDecl>> _args;
+	vector<unique_ptr<FunctionMemberDecl>> _members;
 };
 
-class FunctionDefAST : public PrototypeAST {
+class FunctionDef : public Prototype {
  public:
 	bool _is_simple{};
 	optional<string> _delete_expr;
-	unique_ptr<ASTNode> _body;
+	unique_ptr<Node> _body;
 };
 
-class ModuleAST
-    : virtual public ASTNode
-    , public NamespaceAST {
+class Module
+    : virtual public Node
+    , public Namespace {
  public:
 	vector<string> _imports;
 };
@@ -446,13 +451,13 @@ class ModuleAST
  * Substrate
  */
 
-class SubstrateAST : virtual public ASTNode {
+class SubstrateNode : virtual public Node {
  public:
-	vector<unique_ptr<ExprAST>> _terms;
+	vector<unique_ptr<Expr>> _terms;
 };
 
-auto parse_module(tokenizer& tk) -> unique_ptr<ModuleAST>;
-auto parse_decl(tokenizer& tk) -> unique_ptr<DeclarationAST>;
+auto parse_module(tokenizer& tk) -> unique_ptr<Module>;
+auto parse_decl(tokenizer& tk) -> unique_ptr<Declaration>;
 
 } // namespace AST
 
