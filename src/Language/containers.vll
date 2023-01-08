@@ -1,6 +1,6 @@
-export module containers
+export module containers;
 
-import ranges // provides trait range_of, trait iterator_for, trait sentinel
+import ranges; // provides trait range_of, trait iterator_for, trait sentinel
 
 // would probably be builtin
 export enum order{equal=0, less=-1, greater=1}

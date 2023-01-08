@@ -49,6 +49,7 @@ alias-definition ::= 'alias' identifier '=' type-id ';'
 
 extern-block     ::= 'extern' [string-literal] '{' ns-decl-seq '}'
 namespace-block  ::= 'namespace' namespace-id '{' ns-decl-seq '}'
+namespace-id     ::= qualified-name
 
 reason-expr ::= '(' string-literal ')'
 
@@ -267,8 +268,7 @@ builtin-type ::= 'Float32' | 'Float64' | 'Bool'
                | '__uint8' | '__uint16' | '__uint32' | '__uint64'
 
 
-operator-id ::= '(' operator ')'
-fn-name     ::= identifier | operator-id
+fn-name     ::= identifier
 struct-name ::= identifier
 trait-name  ::= identifier
 var-name    ::= identifier [',' var-name]
@@ -284,3 +284,10 @@ new-line ::= '\n' | ';'
 empty    ::= 
 
 keyword ::= 'None' | 'Noreturn' | 'This' | 'Type' | 'alias' | 'and' | 'as' | 'Bool' | 'break' | 'continue' | 'defer' | 'delete' | 'do' | 'else' | 'end' | 'enum' | 'export' | 'Fail' | 'Float' | 'Float32' | 'Float64' | 'fn' | 'for' | 'if' | 'implements' | 'import' | 'is' | 'Int' | 'Unsigned' | 'let' | 'loop' | 'module' | 'mut' | 'or' | 'private' | 'proc' | 'public' | 'result' | 'return' | 'struct' | 'trait' | 'unless' | 'until' | 'while' | 'yield' | '__[[:alnum:]_]*'
+
+raw-identifier ::= '\p{Letter}[\p{Letter}\p{Digit}_]*'
+identifier ::=
+	raw-identifier - keyword - placeholder-id - reserved-id
+	| '`' raw-identifier '`'
+	| '`' operator-token { operator-token } '`'
+	

@@ -5,3 +5,5 @@ project(Quest
 
 add_subdirectory(src)
 source_group(TREE "src")
+
+source_group(DIST "LICENSE.txt" "Readme.md")

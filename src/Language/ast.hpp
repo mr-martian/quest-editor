@@ -10,6 +10,9 @@
 #include "lex.yy.h"
 #include "token.hpp"
 
+#include <kblib/hash.h>
+#include <kblib/poly_obj.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -56,6 +59,7 @@ class tokenizer {
 
 	[[nodiscard]] bool good() const noexcept { return last.good(); }
 	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
+	[[nodiscard]] bool eof() const noexcept { return _cur != _end; }
 
  public:
 	// If true, the Token::punct_newline token will be returned for the end of
@@ -100,7 +104,7 @@ class Node {
 	Node& operator=(Node&&) = delete;
 
 	virtual unique_ptr<SubstrateNode> substrate() const;
-	virtual std::ostream& pretty_print(std::ostream& os) const;
+	virtual std::ostream& pretty_print(std::ostream& os) const = 0;
 
 	virtual ~Node() = default;
 
@@ -122,44 +126,132 @@ class BuiltinTypeID : public Expr {
 	BuiltinTypeID(std::string name)
 	    : _name(std::move(name)) {}
 
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << _name;
+	}
+
 	string _name;
 };
 
 class IntegerTypeID : public BuiltinTypeID {
  public:
 	Integer _width{};
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << 'i' << _width;
+	}
 };
 class UnsignedTypeID : public BuiltinTypeID {
  public:
 	Integer _width{};
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << 'u' << _width;
+	}
 };
 
 class OwnerTypeID : public BuiltinTypeID {
  public:
 	unique_ptr<Expr> _owned_type;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "owner ";
+		if (_owned_type) {
+			return _owned_type->pretty_print(os);
+		} else {
+			throw 1;
+		}
+	}
 };
 class SharedTypeID : public BuiltinTypeID {
  public:
 	unique_ptr<Expr> _owned_type;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "shared ";
+		if (_owned_type) {
+			return _owned_type->pretty_print(os);
+		} else {
+			throw 1;
+		}
+	}
 };
 class ArrayTypeID : public BuiltinTypeID {
  public:
 	unique_ptr<Expr> _element_type;
 	vector<optional<Integer>> _bounds;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << '[';
+		auto first = true;
+		for (auto dim : _bounds) {
+			if (not std::exchange(first, false)) {
+				os << ',';
+				if (dim) {
+					os << ' ' << *dim;
+				}
+			} else if (dim) {
+				os << *dim;
+			}
+		}
+		os << ']';
+		if (_element_type) {
+			return _element_type->pretty_print(os);
+		} else {
+			throw 1;
+		}
+	}
 };
 
 class TupleTypeID : public Expr {
  public:
 	vector<unique_ptr<Expr>> _member_types;
+
+	// Node interface
+ public:
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "tuple(";
+		auto first = true;
+		for (auto& type : _member_types) {
+			if (not std::exchange(first, false)) {
+				os << ", ";
+			}
+			assert(type);
+			type->pretty_print(os);
+		}
+		return os << ')';
+	}
 };
 class UnionTypeID : public Expr {
  public:
 	set<unique_ptr<Expr>> _member_types;
+
+	// Node interface
+ public:
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "union(";
+		auto first = true;
+		for (auto& type : _member_types) {
+			if (not std::exchange(first, false)) {
+				os << ", ";
+			}
+			assert(type);
+			type->pretty_print(os);
+		}
+		return os << ')';
+	}
 };
 
-class NoneTypeID : public TupleTypeID {};
-class NoreturnTypeID : public UnionTypeID {};
-class ThisTypeID : public BuiltinTypeID {};
+class NoneTypeID : public TupleTypeID {
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << "None";
+	}
+};
+class NoreturnTypeID : public UnionTypeID {
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << "Noreturn";
+	}
+};
+class ThisTypeID : public BuiltinTypeID {
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << "This";
+	}
+};
 
 class TemplatedTypeID : public Expr {
  public:
@@ -170,31 +262,96 @@ class TemplatedTypeID : public Expr {
  * Simple Declarations
  */
 
+class ArgDecl;
+
 class Signature : virtual public Node {
  public:
-	vector<unique_ptr<Expr>> _args, _returns;
+	vector<unique_ptr<ArgDecl>> _args;
+	vector<unique_ptr<Expr>> _returns;
 	struct ref_tag_t {};
 	std::variant<std::monostate, ref_tag_t, vector<unique_ptr<Expr>>> _captures;
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 struct Discriminators {
 	vector<string> scope;
 	optional<Integer> args;
 	unique_ptr<Signature> signature;
+
+	Discriminators() = default;
+	Discriminators(Discriminators&&) = default;
+	Discriminators& operator=(Discriminators&&) = default;
+	~Discriminators();
+	friend auto operator<=>(const Discriminators&, const Discriminators&)
+	    = default;
+};
+
+class Scope;
+
+class Name {
+ public:
+	Name() = default;
+	Name(const Name&);
+	Name(Name&&) = default;
+	Name(string basename, Discriminators discrim)
+	    : _basename(std::move(basename))
+	    , _discrim(std::move(discrim)) {}
+	Name(string basename, const Scope& scope);
+
+	Name& assign(string basename, Discriminators scope);
+	Name& assign(string basename, const Scope& scope);
+
+	friend auto operator<=>(const Name&, const Name&) = default;
+	virtual std::ostream& pretty_print(std::ostream& os) const;
+	friend std::ostream& operator<<(std::ostream& os, const Name& name) {
+		return name.pretty_print(os);
+	}
+
+	string _basename;
+	Discriminators _discrim;
+};
+
+class NameExpr
+    : virtual public Expr
+    , public Name {
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << static_cast<const Name&>(*this);
+	}
 };
 
 class Declaration : virtual public Node {
  public:
-	string _name;
+	Name _name;
 	bool _is_export{};
-	Discriminators _synthesized_discriminators{};
 	string language;
 	virtual bool is_static_scope() const noexcept { return true; }
+};
+
+} // namespace AST
+
+namespace std {
+template <>
+struct hash<AST::Name> {
+	auto operator()(const AST::Name& name) const -> std::size_t { return 0; }
+};
+} // namespace std
+
+namespace AST {
+
+class Scope {
+ public:
+	std::unordered_map<Name, Declaration*> symbols;
+	Name name;
 };
 
 class AliasDecl : public Declaration {
  public:
 	unique_ptr<Expr> _type;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "alias " << _name << " = ";
+		assert(_type);
+		return _type->pretty_print(os) << ";";
+	}
 };
 
 class VarDecl : public Declaration {
@@ -203,16 +360,68 @@ class VarDecl : public Declaration {
 	bool _is_mut{};
 	bool _is_const{};
 	unique_ptr<Node> _initializer;
+	std::ostream& pretty_print(std::ostream& os) const override;
+};
+
+class ArgDecl : public VarDecl {
+ public:
+	ArgDecl() { _is_export = false; }
+	bool _is_implicit;
+	bool _is_anonymous;
+	bool _is_generic;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "let ";
+		if (_is_mut) {
+			os << "mut ";
+		}
+		if (_is_const) {
+			os << "const ";
+		}
+		if (_is_implicit) {
+			os << "$";
+		}
+		if (not _is_anonymous) {
+			os << _name;
+		}
+		if (_type) {
+			os << " : ";
+			_type->pretty_print(os);
+		}
+		if (_initializer) {
+			os << " = ";
+			_initializer->pretty_print(os);
+		}
+		return os << ";";
+	}
 };
 
 class ExprList : public Node {
  public:
 	vector<unique_ptr<Expr>> _elems;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		auto first = true;
+		for (auto& ex : _elems) {
+			if (not std::exchange(first, false)) {
+				os << ", ";
+			}
+			assert(ex);
+			ex->pretty_print(os);
+		}
+		return os;
+	}
 };
 
 class Namespace : public Declaration {
  public:
 	vector<unique_ptr<Declaration>> _declarations;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "namespace " << _name << "{";
+		for (auto& decl : _declarations) {
+			assert(decl);
+			decl->pretty_print(os);
+		}
+		return os << "}";
+	}
 };
 
 /*
@@ -226,21 +435,21 @@ enum class Direction : unsigned short {
 	Either = Left | Right,
 };
 
-class Name : public Expr {
- public:
-	string _basename;
-	Discriminators _discrim;
-};
-
 class Operator : public Name {
  public:
 	Direction _assoc{};
 	Direction _eval_order{};
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "(operator " << static_cast<const Name&>(*this) << ')';
+	}
 };
 
 class Literal : public Expr {
  public:
 	string _text;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << "(literal " << _text << ")";
+	}
 };
 
 class IntegerLiteral : public Literal {};
@@ -253,6 +462,14 @@ class Enumerator : public Literal {
  public:
 	string _name;
 	unique_ptr<Expr> _value;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << _name;
+		if (_value) {
+			os << " = ";
+			_value->pretty_print(os);
+		}
+		return os;
+	}
 };
 
 class BoolKeyword : public Enumerator {};
@@ -265,18 +482,52 @@ class UnaryExpr : public Expr {
  public:
 	unique_ptr<Operator> _op;
 	unique_ptr<Expr> _operand;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << '(';
+		assert(_op);
+		_op->pretty_print(os);
+		assert(_operand);
+		os << ' ';
+		_operand->pretty_print(os);
+		return os << ')';
+	}
 };
 
 class BinaryExpr : public Expr {
  public:
 	unique_ptr<Operator> _op;
 	unique_ptr<Expr> _left, _right;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << '(';
+		assert(_op);
+		_op->pretty_print(os);
+		assert(_left);
+		os << ' ';
+		_left->pretty_print(os);
+		assert(_right);
+		os << ", ";
+		_right->pretty_print(os);
+		return os << ')';
+	}
 };
 
 class CallExpr : public Expr {
  public:
-	unique_ptr<Expr> _fun;
+	unique_ptr<NameExpr> _fun;
 	vector<unique_ptr<Expr>> _args;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		assert(_fun);
+		os << "((" << *_fun << ") (";
+		auto first = true;
+		for (auto& arg : _args) {
+			if (not std::exchange(first, false)) {
+				os << ", ";
+			}
+			assert(arg);
+			arg->pretty_print(os);
+		}
+		os << "))";
+	}
 };
 
 class RewriteExpr : public Expr {
@@ -287,6 +538,18 @@ class RewriteExpr : public Expr {
 
 class Block : public Expr {
 	vector<unique_ptr<Expr>> _expressions;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "{";
+		auto first = true;
+		for (auto& ex : _expressions) {
+			if (not std::exchange(first, false)) {
+				os << "; ";
+			}
+			assert(ex);
+			ex->pretty_print(os);
+		}
+		os << "}";
+	}
 };
 
 class Assignment : public Expr {};
@@ -367,8 +630,6 @@ class ResultExpr
  * Complex Declarations
  */
 
-class ArgDecl : public VarDecl {};
-
 class Prototype
     : public Declaration
     , public Expr {
@@ -378,6 +639,7 @@ class Prototype
 	unique_ptr<Signature> _signature;
 
 	bool is_static_scope() const noexcept override { return true; }
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 enum class Protection {
@@ -440,11 +702,26 @@ class FunctionDef : public Prototype {
 	unique_ptr<Node> _body;
 };
 
+struct ModuleImport {
+	std::string _name;
+	bool _is_export;
+};
+
 class Module
     : virtual public Node
     , public Namespace {
  public:
-	vector<string> _imports;
+	vector<ModuleImport> _imports;
+	std::ostream& pretty_print(std::ostream& os) const override {
+		os << "module " << _name << ';';
+		for (auto& import : _imports) {
+			if (import._is_export) {
+				os << " export";
+			}
+			os << " import " << import._name << ';';
+		}
+		(void)this->_declarations;
+	}
 };
 
 /*
@@ -457,7 +734,6 @@ class SubstrateNode : virtual public Node {
 };
 
 auto parse_module(tokenizer& tk) -> unique_ptr<Module>;
-auto parse_decl(tokenizer& tk) -> unique_ptr<Declaration>;
 
 } // namespace AST
 

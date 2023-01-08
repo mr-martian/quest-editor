@@ -10,6 +10,45 @@ namespace AST {
 
 unique_ptr<AST::SubstrateNode> AST::Node::substrate() const { throw 0; }
 
-std::ostream& AST::Node::pretty_print(std::ostream& os) const { throw 0; }
+Name::Name(const Name&) { throw 0; }
+
+std::ostream& Name::pretty_print(std::ostream& os) const { throw 0; }
+
+Discriminators::~Discriminators() = default;
+
+std::ostream& Prototype::pretty_print(std::ostream& os) const {
+	if (_linkage) {
+		os << "extern " << kblib::quoted(*_linkage) << ' ';
+		os << (_is_proc ? "proc" : "fn");
+	}
+	throw 0;
+}
+
+std::ostream& VarDecl::pretty_print(std::ostream& os) const {
+	os << "let ";
+	if (_is_mut) {
+		os << "mut ";
+	}
+	if (_is_const) {
+		os << "const ";
+	}
+	os << _name;
+	if (_type) {
+		os << " : ";
+		_type->pretty_print(os);
+	}
+	if (_initializer) {
+		if (auto braced_initializer
+		    = dynamic_cast<const ExprList*>(_initializer.get())) {
+			os << '{';
+			braced_initializer->pretty_print(os);
+			os << '}';
+		} else {
+			os << " = ";
+			_initializer->pretty_print(os);
+		}
+	}
+	return os << ";";
+}
 
 } // namespace AST

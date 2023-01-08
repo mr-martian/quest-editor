@@ -21,6 +21,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <kblib/stringops.h>
+
 struct source_location {
 	const char* filename{};
 
@@ -188,6 +190,7 @@ struct Token {
 	} type;
 
 	std::string str;
+	source_location loc;
 
 	[[nodiscard]] bool good() const noexcept {
 		return type != eof and type != unknown;
@@ -235,22 +238,22 @@ constexpr token_class tok_classify(Token::Type t) {
 }
 std::string tok_name(Token::Type t);
 
-class unexpected : std::invalid_argument {
+class unexpected : public std::invalid_argument {
  public:
 	Token found;
 	std::string expected;
 
-	static std::string str(Token found, std::string expected) {
+	static std::string format_str(Token found, std::string expected) {
 		using namespace std::literals;
-		return "expected "s + expected + "before " + found.str;
+		return kblib::concat("expected "sv, expected, "before "sv, found.str);
 	}
 
 	unexpected(const Token& found, Token::Type expected)
-	    : std::invalid_argument(str(found, tok_name(expected)))
+	    : std::invalid_argument(format_str(found, tok_name(expected)))
 	    , found(found)
 	    , expected(tok_name(expected)) {}
 	unexpected(const Token& found, std::string expected)
-	    : std::invalid_argument(str(found, expected))
+	    : std::invalid_argument(format_str(found, expected))
 	    , found(found)
 	    , expected(std::move(expected)) {}
 };

@@ -29,7 +29,7 @@ std::string tok_name(Token::Type t) {
 	case Token::literal_char:
 		return "character literal '\x1B'";
 	case Token::literal_string:
-		return "string literal \"\x1B\"";
+		return "string literal \x1B";
 
 	//@punct:empty
 	case Token::punct_lbrace:
@@ -63,7 +63,7 @@ std::string tok_name(Token::Type t) {
 	case Token::punct_attr:
 		return "#[";
 	case Token::punct_newline:
-		return "\n";
+		return "newline";
 	case Token::punct_substr_b:
 		return "(:";
 	case Token::punct_substr_e:
