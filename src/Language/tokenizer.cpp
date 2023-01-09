@@ -314,6 +314,24 @@ std::string tok_name(Token::Type t) {
 	}
 }
 
+std::string tok_name(Token t) {
+	std::string ret;
+	const auto name = tok_name(t.type);
+	for (auto c : name) {
+		if (c == '\x1B') {
+			ret += t.str;
+		} else {
+			ret += c;
+		}
+	}
+	return ret;
+}
+
+std::string unexpected::format_str(Token found, std::string expected) {
+	using namespace std::literals;
+	return kblib::concat("expected "sv, expected, " before "sv, tok_name(found));
+}
+
 tokenizer::tokenizer(std::istream& in, std::string filename, bool l)
     : _lex{std::move(filename), l, in}
     , _c(_lex.lex())
@@ -335,7 +353,7 @@ Token tokenizer::expect(const Token::Type t) {
 	if (auto n = gettok_if(t)) {
 		return *std::move(n);
 	} else {
-		throw unexpected(last, t);
+		throw unexpected(last, tok_name(Token{t, ""}));
 	}
 }
 
@@ -344,7 +362,13 @@ Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
 	                [&](const auto& t) { return t == next.type; })) {
 		return gettok();
 	} else {
-		throw unexpected(last, Token::unknown);
+		std::vector<std::string> expected_names(ts.size());
+		std::transform(begin(ts), end(ts), begin(expected_names),
+		               [](Token::Type t) {
+			               return tok_name(Token{t, ""});
+		               });
+		auto expected = kblib::join(expected_names, ", or ");
+		throw unexpected(last, expected);
 	}
 }
 
@@ -367,7 +391,6 @@ void tokenizer::advance() {
 	++_cur;
 
 	{
-		const auto name = tok_name(last.type);
 		/*constexpr auto& flag = "\x1B";
 		auto formatted = std::string{};
 		kblib::search_replace_copy(name,     //
@@ -375,6 +398,7 @@ void tokenizer::advance() {
 		                           last.str, //
 		                           std::back_inserter(formatted));*/
 		std::cout << "TOKEN: " << last.type << ' '; // << formatted
+		const auto name = tok_name(last.type);
 		for (auto c : name) {
 			if (c == '\x1B') {
 				std::cout << last.str;

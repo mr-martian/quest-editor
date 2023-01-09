@@ -97,7 +97,9 @@ auto parse_ns_decl_seq(tokenizer& tk, Scope& scope, const Declaration& context)
 	vector<unique_ptr<Declaration>> decls;
 
 	while (tk and not tk.check(Token::punct_rbrace) and not tk.eof()) {
-		decls.push_back(parse_decl(tk, scope, context));
+		bool is_export = tk.gettok_if(Token::kw_export).has_value();
+		auto& decl = decls.emplace_back(parse_decl(tk, scope, context));
+		decl->_is_export = is_export;
 	}
 	return decls;
 }
@@ -140,53 +142,69 @@ auto parse_namespace_block(tokenizer& tk, Scope& parent,
 }
 
 /* module ::=
- *		module-definition [ module-imports ] ns-decl-seq
+ *		module-definition [ module-imports ] module-decl-seq
+ * module-imports ::=
+ *		{ [ 'export' ] 'import' module-name ';' }
+ * module-decl-seq ::=
+ *		{ [ 'export' ] declaration }
  */
 auto parse_module(tokenizer& tk) -> unique_ptr<Module> {
 	unique_ptr<Module> root;
-	Scope scope;
+	auto scope = Scope{};
 	if (tk.peek().type == Token::kw_export
 	    or tk.peek().type == Token::kw_module) {
 		root = parse_module_def(tk);
 		root->language = "Vellum";
 	} else {
-		throw unexpected(tk.gettok(), Token::kw_module);
+		throw unexpected(tk.gettok(), "module");
 	}
-	while (tk.cur().type == Token::kw_import
-	       or (tk.cur().type == Token::kw_export
-	           and tk.peek().type == Token::kw_import)) {
-		auto is_export = false;
-		if (tk.gettok_if(Token::kw_export)) {
-			is_export = true;
-		}
-		tk.expect(Token::kw_import);
 
-		const auto tok = tk.expect(Token::identifier);
-		root->_imports.push_back({tok.str, is_export});
-		tk.expect(Token::punct_semi);
+	auto is_export = bool{};
+	while (tk and not tk.eof()) {
+		is_export = tk.gettok_if(Token::kw_export).has_value();
+		if (tk.gettok_if(Token::kw_import)) {
+			do {
+				auto name = tk.expect(Token::identifier);
+				root->_imports.push_back({name.str, is_export});
+			} while (tk.gettok_if(Token::punct_comma));
+			tk.expect(Token::punct_semi);
+		} else {
+			break;
+		}
 	}
-	root->_declarations = parse_ns_decl_seq(tk, scope, *root);
+	root->pretty_print(std::cout) << '\n';
+	while (tk and not tk.eof()) {
+		auto& last
+		    = root->_declarations.emplace_back(parse_decl(tk, scope, *root));
+		last->_is_export = is_export;
+		last->pretty_print(std::cout) << '\n';
+
+		// this has to be done last so that it doesn't interfere with the previous
+		// loop already setting it and then breaking
+		is_export = tk.gettok_if(Token::kw_export).has_value();
+	}
 	return root;
 }
 
+/* module-definition ::=
+ *		[ 'export' ] 'module' module-name ';'
+ */
 auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
 	auto root = std::make_unique<Module>();
-	{
-		const auto tok = tk.gettok();
-		switch (tok.type) {
-		case Token::kw_export:
-			root->_is_export = true;
-			tk.expect(Token::kw_module);
-			[[fallthrough]];
-		case Token::kw_module: {
-			const auto name = tk.expect(Token::identifier);
-			root->_name._basename = name.str;
-			tk.expect(Token::punct_semi);
-		} break;
-		default:
-			throw unexpected(tok, Token::kw_module);
-		}
+	const auto tok = tk.gettok();
+	switch (tok.type) {
+	case Token::kw_export:
+		root->_is_export = true;
+		tk.expect(Token::kw_module);
+		break;
+	case Token::kw_module:
+		break;
+	default:
+		throw unexpected(tok, "module");
 	}
+	const auto name = tk.expect(Token::identifier);
+	root->_name._basename = name.str;
+	tk.expect(Token::punct_semi);
 	return root;
 }
 
@@ -214,7 +232,6 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
     -> unique_ptr<Declaration> {
 	const auto& context = outer._name._discrim;
 	unique_ptr<Declaration> decl;
-	bool is_export = tk.gettok_if(Token::kw_export).has_value();
 	switch (tk.peek().type) {
 	case Token::kw_let: {
 		decl = parse_var_decl(tk, scope, context);
@@ -222,6 +239,7 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	case Token::kw_alias: {
 		auto alias = make_unique_for_modify<AliasDecl>(decl);
 		alias->_name._discrim.scope = context.scope;
+		tk.ignore();
 		// parse alias declaration
 		alias->_name._basename = tk.expect(Token::identifier).str;
 		tk.expect(Token::punct_equal);
@@ -249,10 +267,12 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	case Token::kw_namespace: {
 		decl = parse_namespace_block(tk, scope, outer);
 	} break;
+	case Token::kw_import: {
+		throw unexpected(tk.peek(), "declaration");
+	} break;
 	default:
-		throw unexpected(tk.peek(), Token::unknown);
+		throw unexpected(tk.peek(), "declaration");
 	}
-	decl->_is_export = is_export;
 	return decl;
 }
 
@@ -371,75 +391,129 @@ auto parse_block(tokenizer& tk, Scope& scope, const Discriminators& context)
 	throw 0;
 }
 
+template <Token::Type begin, Token::Type end>
+auto read_bracketed_expr(tokenizer& tk, Scope& scope,
+                         const Discriminators& context,
+                         std::vector<Token>& expr) -> void {
+	tk.expect(begin);
+	while (auto& tok = expr.emplace_back(tk.peek())) {
+		if (tok.type == end) {
+			return;
+		}
+		switch (tok.type) {
+		case Token::punct_rparen:
+		case Token::punct_rbrck:
+		case Token::punct_rbrace:
+		case Token::punct_substr_e:
+			throw 1;
+		case Token::punct_lparen:
+			read_bracketed_expr<Token::punct_lparen, Token::punct_rparen>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_lbrck:
+			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_attr:
+			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_lbrace:
+			read_bracketed_expr<Token::punct_lbrace, Token::punct_rbrace>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_substr_b:
+			read_bracketed_expr<Token::punct_substr_b, Token::punct_substr_e>(
+			    tk, scope, context, expr);
+			break;
+		default:
+			tk.ignore();
+		}
+	}
+}
+
 auto parse_expr(tokenizer& tk, Scope& scope, const Discriminators& context)
     -> unique_ptr<Expr> {
-	switch (tok_classify(tk.cur().type)) {
-	case token_class::eof:
-	case token_class::unknown: {
-		throw unexpected(tk.cur(), "expression");
-	} break;
-	case token_class::literal:
-	case token_class::identifier: {
+	std::vector<Token> expr;
 
-	} break;
-	case token_class::punct: {
-		switch (tk.cur().type) {
-		case Token::punct_lbrace: {
-			parse_block(tk, scope, context);
-		} break;
-		case Token::punct_lbrck: {
-
-		} break;
-		case Token::punct_lparen: {
-
-		} break;
-		case Token::punct_scope: {
-
-		} break;
-		case Token::punct_substr_b: {
-
-		} break;
-		case Token::punct_attr: {
-
-		} break;
+	while (auto& tok = expr.emplace_back(tk.peek())) {
+		switch (tok.type) {
+		case Token::punct_lparen:
+			read_bracketed_expr<Token::punct_lparen, Token::punct_rparen>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_lbrck:
+			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_attr:
+			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_lbrace:
+			read_bracketed_expr<Token::punct_lbrace, Token::punct_rbrace>(
+			    tk, scope, context, expr);
+			break;
+		case Token::punct_substr_b:
+			read_bracketed_expr<Token::punct_substr_b, Token::punct_substr_e>(
+			    tk, scope, context, expr);
+			break;
 		default:
-			throw unexpected(tk.cur(), "expression");
+			break;
+			// these tokens cannot be part of the expression:
+		case Token::punct_semi:
+		case Token::punct_comma:
+		case Token::punct_rbrace:
+		case Token::punct_rbrck:
+		case Token::punct_rparen:
+		case Token::punct_substr_e: {
+			expr.pop_back();
+			goto end_expr;
 		}
-	} break;
-	case token_class::op: {
-
-	} break;
-	case token_class::keyword: {
-		// left corners of control_expr, excepting if-expressions and short-form
-		// substrate-expressions
-		switch (tk.cur().type) {
-		case Token::kw_await:
-		case Token::kw_break:
-		case Token::kw_continue:
-		case Token::kw_do:
-		case Token::kw_for:
-		case Token::kw_if:
-		case Token::kw_llvm:
-		case Token::kw_loop:
-		case Token::kw_match:
-		case Token::kw_result:
-		case Token::kw_return:
-		case Token::kw_substrate:
-		case Token::kw_unless:
-		case Token::kw_until:
-		case Token::kw_while:
-		case Token::kw_yield: {
-			return parse_control_expr(tk, scope, context);
-		} break;
-		default:
-			parse_assignment_expr(tk, scope, context);
 		}
-	} break;
-	case token_class::special: {
-
-	} break;
+		tk.ignore();
 	}
-	throw 0;
+end_expr:
+	if (expr.size() == 1) {
+		switch (expr.front().type) {
+		case Token::identifier: {
+			auto name = std::make_unique<NameExpr>();
+			name->_tok = expr.front();
+			name->_basename = expr.front().str;
+			return name;
+		} break;
+		case Token::literal_char: {
+			auto name = std::make_unique<CharLiteral>();
+			name->_tok = expr.front();
+			name->_text = expr.front().str;
+			return name;
+		} break;
+		case Token::literal_float: {
+			auto name = std::make_unique<FloatLiteral>();
+			name->_tok = expr.front();
+			name->_text = expr.front().str;
+			return name;
+		} break;
+		case Token::literal_int: {
+			auto name = std::make_unique<IntegerLiteral>();
+			name->_tok = expr.front();
+			name->_text = expr.front().str;
+			return name;
+		} break;
+		case Token::literal_string: {
+			auto name = std::make_unique<StringLiteral>();
+			name->_tok = expr.front();
+			name->_text = expr.front().str;
+			return name;
+		} break;
+		default:
+			std::cout << "expression parser NYI\n";
+			throw 0;
+		}
+	} else {
+		std::cout << "expression parser NYI\n";
+		throw 0;
+	}
 }
 
 } // namespace AST

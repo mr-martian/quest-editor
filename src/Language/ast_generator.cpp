@@ -7,6 +7,9 @@
 #include "kblib/io.h"
 #include "kblib/stringops.h"
 #include <cassert>
+#include <fstream>
+#include <iostream>
+#include <string>
 
 int main(int argc, char** argv) {
 	assert(argc >= 1);

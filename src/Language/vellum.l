@@ -21,6 +21,17 @@
       public:
       std::string _filename;
       bool _newline_mode;
+
+      source_location sl() const {
+			return {_filename.c_str(), lineno(), columno(), size()};
+      }
+
+      Token token(Token::Type t) const {
+			return Token{t, str(), sl()};
+      }
+      Token token(Token::Type t, std::string str) const {
+			return Token{t, std::move(str), sl()};
+      }
 %}
 
 %init{
@@ -57,14 +68,21 @@ escape_sequence	{simple_escape}|"\\x"([[:xdigit:]][[:xdigit:]]?|"{"[[:xdigit:]]+
 literal_string \"([^"\"\\\n"]|{escape_sequence}|{UCN})*\"
 
 identifier	\p{Letter}[\p{Letter}\p{Digit}_]*
+operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 
 %x COMMENT
 
 %%
 
-
-\n		{ if (_newline_mode) { co_yield {Token::punct_newline}; } }
+\n		{ if (_newline_mode) { co_yield token(Token::punct_newline); } }
 \p{Space}+	{ }
+
+'`' {identifier} '`'		{
+ co_yield token(Token::identifier, str().substr(1, str().size() - 1));
+}
+'`' {operator_seq} '`'		{
+	co_yield token(Token::identifier, str().substr(1, str().size() - 1));
+}
 
 "/*"	{ start(COMMENT); }
 <COMMENT>{
@@ -75,146 +93,146 @@ identifier	\p{Letter}[\p{Letter}\p{Digit}_]*
 }
 "//"[^\n]* { }
 
-{literal_int}   	{ co_yield {Token::literal_int, str()}; }
-{literal_float} 	{ co_yield {Token::literal_float, str()}; }
-{literal_string}	{ co_yield {Token::literal_string, str()}; }
+{literal_int}   	{ co_yield token(Token::literal_int, str()); }
+{literal_float} 	{ co_yield token(Token::literal_float, str()); }
+{literal_string}	{ co_yield token(Token::literal_string, str()); }
 
-"Bool"   	{ co_yield {Token::kw_Bool}; }
-"Byte"   	{ co_yield {Token::kw_Byte}; }
-"Fail"   	{ co_yield {Token::kw_Fail}; }
-"Float32"	{ co_yield {Token::kw_Float32}; }
-"Float64"	{ co_yield {Token::kw_Float64}; }
-"Int"    	{ co_yield {Token::kw_Int}; }
-"None"   	{ co_yield {Token::kw_None}; }
-"Noreturn"	{ co_yield {Token::kw_Noreturn}; }
-"This"   	{ co_yield {Token::kw_This}; }
-"Type"   	{ co_yield {Token::kw_Type}; }
-"Unsigned"	{ co_yield {Token::kw_Unsigned}; }
+"Bool"   	{ co_yield token(Token::kw_Bool); }
+"Byte"   	{ co_yield token(Token::kw_Byte); }
+"Fail"   	{ co_yield token(Token::kw_Fail); }
+"Float32"	{ co_yield token(Token::kw_Float32); }
+"Float64"	{ co_yield token(Token::kw_Float64); }
+"Int"    	{ co_yield token(Token::kw_Int); }
+"None"   	{ co_yield token(Token::kw_None); }
+"Noreturn"	{ co_yield token(Token::kw_Noreturn); }
+"This"   	{ co_yield token(Token::kw_This); }
+"Type"   	{ co_yield token(Token::kw_Type); }
+"Unsigned"	{ co_yield token(Token::kw_Unsigned); }
 
-"i"([0-9]+)	{ co_yield {Token::id_int, str()}; }
-"u"([0-9]+)	{ co_yield {Token::id_unsigned, str()}; }
+"i"([0-9]+)	{ co_yield token(Token::id_int, str()); }
+"u"([0-9]+)	{ co_yield token(Token::id_unsigned, str()); }
 
-"__"\w*  	{ co_yield {Token::reserved_id, str()}; }
-"_"[A-Z]\w*	{ co_yield {Token::reserved_id, str()}; }
-"_"[0-9]+	{ co_yield {Token::placeholder, str()}; }
-"_"      	{ co_yield {Token::kw_underscore}; }
+"__"\w*  	{ co_yield token(Token::reserved_id, str()); }
+"_"[A-Z]\w*	{ co_yield token(Token::reserved_id, str()); }
+"_"[0-9]+	{ co_yield token(Token::placeholder, str()); }
+"_"      	{ co_yield token(Token::kw_underscore); }
 
-"alias"  	{ co_yield {Token::kw_alias}; }
-"asm"    	{ co_yield {Token::kw_asm}; }
-"as"     	{ co_yield {Token::kw_as}; }
-"await"		{ co_yield {Token::kw_await}; }
-"break"  	{ co_yield {Token::kw_break}; }
-"consume"	{ co_yield {Token::kw_consume}; }
-"continue"	{ co_yield {Token::kw_continue}; }
-"defer"  	{ co_yield {Token::kw_defer}; }
-"delete" 	{ co_yield {Token::kw_delete}; }
-"do"     	{ co_yield {Token::kw_do}; }
-"drop"   	{ co_yield {Token::kw_drop}; }
-"else"   	{ co_yield {Token::kw_else}; }
-"end"    	{ co_yield {Token::kw_end}; }
-"enum"    	{ co_yield {Token::kw_enum}; }
-"export"		{ co_yield {Token::kw_export}; }
-"false"  	{ co_yield {Token::kw_false}; }
-"fn"     	{ co_yield {Token::kw_fn}; }
-"for"    	{ co_yield {Token::kw_for}; }
-"if"     	{ co_yield {Token::kw_if}; }
-"implements"	{ co_yield {Token::kw_implements}; }
-"import" 	{ co_yield {Token::kw_import}; }
-"is"     	{ co_yield {Token::kw_is}; }
-"let"			{ co_yield {Token::kw_let}; }
-"loop"   	{ co_yield {Token::kw_loop}; }
-"match"  	{ co_yield {Token::kw_match}; }
-"module" 	{ co_yield {Token::kw_module}; }
-"mut"    	{ co_yield {Token::kw_mut}; }
-"private"	{ co_yield {Token::kw_private}; }
-"proc"   	{ co_yield {Token::kw_proc}; }
-"public" 	{ co_yield {Token::kw_public}; }
-"result" 	{ co_yield {Token::kw_result}; }
-"return" 	{ co_yield {Token::kw_return}; }
-"struct" 	{ co_yield {Token::kw_struct}; }
-"substrate"	{ co_yield {Token::kw_substrate}; }
-"trait"  	{ co_yield {Token::kw_trait}; }
-"true"   	{ co_yield {Token::kw_true}; }
-"typeof" 	{ co_yield {Token::kw_typeof}; }
-"unless" 	{ co_yield {Token::kw_unless}; }
-"until"  	{ co_yield {Token::kw_until}; }
-"while"  	{ co_yield {Token::kw_while}; }
-"yield"  	{ co_yield {Token::kw_yield}; }
+"alias"  	{ co_yield token(Token::kw_alias); }
+"asm"    	{ co_yield token(Token::kw_asm); }
+"as"     	{ co_yield token(Token::kw_as); }
+"await"		{ co_yield token(Token::kw_await); }
+"break"  	{ co_yield token(Token::kw_break); }
+"consume"	{ co_yield token(Token::kw_consume); }
+"continue"	{ co_yield token(Token::kw_continue); }
+"defer"  	{ co_yield token(Token::kw_defer); }
+"delete" 	{ co_yield token(Token::kw_delete); }
+"do"     	{ co_yield token(Token::kw_do); }
+"drop"   	{ co_yield token(Token::kw_drop); }
+"else"   	{ co_yield token(Token::kw_else); }
+"end"    	{ co_yield token(Token::kw_end); }
+"enum"    	{ co_yield token(Token::kw_enum); }
+"export"		{ co_yield token(Token::kw_export); }
+"false"  	{ co_yield token(Token::kw_false); }
+"fn"     	{ co_yield token(Token::kw_fn); }
+"for"    	{ co_yield token(Token::kw_for); }
+"if"     	{ co_yield token(Token::kw_if); }
+"implements"	{ co_yield token(Token::kw_implements); }
+"import" 	{ co_yield token(Token::kw_import); }
+"is"     	{ co_yield token(Token::kw_is); }
+"let"			{ co_yield token(Token::kw_let); }
+"loop"   	{ co_yield token(Token::kw_loop); }
+"match"  	{ co_yield token(Token::kw_match); }
+"module" 	{ co_yield token(Token::kw_module); }
+"mut"    	{ co_yield token(Token::kw_mut); }
+"private"	{ co_yield token(Token::kw_private); }
+"proc"   	{ co_yield token(Token::kw_proc); }
+"public" 	{ co_yield token(Token::kw_public); }
+"result" 	{ co_yield token(Token::kw_result); }
+"return" 	{ co_yield token(Token::kw_return); }
+"struct" 	{ co_yield token(Token::kw_struct); }
+"substrate"	{ co_yield token(Token::kw_substrate); }
+"trait"  	{ co_yield token(Token::kw_trait); }
+"true"   	{ co_yield token(Token::kw_true); }
+"typeof" 	{ co_yield token(Token::kw_typeof); }
+"unless" 	{ co_yield token(Token::kw_unless); }
+"until"  	{ co_yield token(Token::kw_until); }
+"while"  	{ co_yield token(Token::kw_while); }
+"yield"  	{ co_yield token(Token::kw_yield); }
 
-":="	{ co_yield {Token::op_assign}; }
-"+="	{ co_yield {Token::op_plus_assign}; }
-"+?="	{ co_yield {Token::op_qplus_assign}; }
-"+%="	{ co_yield {Token::op_wplus_assign}; }
-"-="	{ co_yield {Token::op_minus_assign}; }
-"-?="	{ co_yield {Token::op_qminus_assign}; }
-"-%="	{ co_yield {Token::op_wminus_assign}; }
-"*="	{ co_yield {Token::op_times_assign}; }
-"/="	{ co_yield {Token::op_div_assign}; }
-"%="	{ co_yield {Token::op_rem_assign}; }
-"&="	{ co_yield {Token::op_bitand_assign}; }
-"|="	{ co_yield {Token::op_bitor_assign}; }
-"<<="	{ co_yield {Token::op_lshift_assign}; }
-">>="	{ co_yield {Token::op_rshift_assign}; }
+":="	{ co_yield token(Token::op_assign); }
+"+="	{ co_yield token(Token::op_plus_assign); }
+"+?="	{ co_yield token(Token::op_qplus_assign); }
+"+%="	{ co_yield token(Token::op_wplus_assign); }
+"-="	{ co_yield token(Token::op_minus_assign); }
+"-?="	{ co_yield token(Token::op_qminus_assign); }
+"-%="	{ co_yield token(Token::op_wminus_assign); }
+"*="	{ co_yield token(Token::op_times_assign); }
+"/="	{ co_yield token(Token::op_div_assign); }
+"%="	{ co_yield token(Token::op_rem_assign); }
+"&="	{ co_yield token(Token::op_bitand_assign); }
+"|="	{ co_yield token(Token::op_bitor_assign); }
+"<<="	{ co_yield token(Token::op_lshift_assign); }
+">>="	{ co_yield token(Token::op_rshift_assign); }
 
-"{"	{ co_yield {Token::punct_lbrace}; }
-"}"	{ co_yield {Token::punct_rbrace}; }
-"["	{ co_yield {Token::punct_lbrck}; }
-"]"	{ co_yield {Token::punct_rbrck}; }
-"("	{ co_yield {Token::punct_lparen}; }
-")"	{ co_yield {Token::punct_rparen}; }
-","	{ co_yield {Token::punct_comma}; }
-";"	{ co_yield {Token::punct_semi}; }
-"="	{ co_yield {Token::punct_equal}; }
-"->"	{ co_yield {Token::punct_arrow}; }
-":"	{ co_yield {Token::punct_colon}; }
-"::"	{ co_yield {Token::punct_scope}; }
-"!"	{ co_yield {Token::punct_bang}; }
-"$"	{ co_yield {Token::punct_dollar}; }
-"#["	{ co_yield {Token::punct_attr}; }
-"(:"	{ co_yield {Token::punct_substr_b}; }
-":)"	{ co_yield {Token::punct_substr_e}; }
+"{"	{ co_yield token(Token::punct_lbrace); }
+"}"	{ co_yield token(Token::punct_rbrace); }
+"["	{ co_yield token(Token::punct_lbrck); }
+"]"	{ co_yield token(Token::punct_rbrck); }
+"("	{ co_yield token(Token::punct_lparen); }
+")"	{ co_yield token(Token::punct_rparen); }
+","	{ co_yield token(Token::punct_comma); }
+";"	{ co_yield token(Token::punct_semi); }
+"="	{ co_yield token(Token::punct_equal); }
+"->"	{ co_yield token(Token::punct_arrow); }
+":"	{ co_yield token(Token::punct_colon); }
+"::"	{ co_yield token(Token::punct_scope); }
+"!"	{ co_yield token(Token::punct_bang); }
+"$"	{ co_yield token(Token::punct_dollar); }
+"#["	{ co_yield token(Token::punct_attr); }
+"(:"	{ co_yield token(Token::punct_substr_b); }
+":)"	{ co_yield token(Token::punct_substr_e); }
 
-"."	{ co_yield {Token::op_dot}; }
-"^"	{ co_yield {Token::op_carat}; }
-"@"	{ co_yield {Token::op_at}; }
-"#"	{ co_yield {Token::op_hash}; }
-"|>"	{ co_yield {Token::op_pipe}; }
+"."	{ co_yield token(Token::op_dot); }
+"^"	{ co_yield token(Token::op_carat); }
+"@"	{ co_yield token(Token::op_at); }
+"#"	{ co_yield token(Token::op_hash); }
+"|>"	{ co_yield token(Token::op_pipe); }
 
-"and"	{ co_yield {Token::op_and}; }
-"or"	{ co_yield {Token::op_or}; }
-"not"	{ co_yield {Token::op_not}; }
-"mod"	{ co_yield {Token::op_mod}; }
-"xor"	{ co_yield {Token::op_xor}; }
-"+"	{ co_yield {Token::op_plus}; }
-"-"	{ co_yield {Token::op_minus}; }
-"*"	{ co_yield {Token::op_times}; }
-"/"	{ co_yield {Token::op_div}; }
-"%"	{ co_yield {Token::op_rem}; }
-"+?"	{ co_yield {Token::op_qplus}; }
-"-?"	{ co_yield {Token::op_qminus}; }
-"+%"	{ co_yield {Token::op_wplus}; }
-"-%"	{ co_yield {Token::op_wminus}; }
-"&"	{ co_yield {Token::op_bitand}; }
-"|"	{ co_yield {Token::op_bitor}; }
-"<<"	{ co_yield {Token::op_lshift}; }
-">>"	{ co_yield {Token::op_rshift}; }
-"~"	{ co_yield {Token::op_compl}; }
-"=="	{ co_yield {Token::op_equal}; }
-"!="	{ co_yield {Token::op_unequal}; }
-"<>"	{ co_yield {Token::op_unequal}; }
-"<=>"	{ co_yield {Token::op_cmp}; }
-"<="	{ co_yield {Token::op_lte}; }
-">="	{ co_yield {Token::op_gte}; }
-"<"	{ co_yield {Token::op_less}; }
-">"	{ co_yield {Token::op_greater}; }
-"??"	{ co_yield {Token::op_qmqm}; }
-"?"	{ co_yield {Token::op_qm}; }
+"and"	{ co_yield token(Token::op_and); }
+"or"	{ co_yield token(Token::op_or); }
+"not"	{ co_yield token(Token::op_not); }
+"mod"	{ co_yield token(Token::op_mod); }
+"xor"	{ co_yield token(Token::op_xor); }
+"+"	{ co_yield token(Token::op_plus); }
+"-"	{ co_yield token(Token::op_minus); }
+"*"	{ co_yield token(Token::op_times); }
+"/"	{ co_yield token(Token::op_div); }
+"%"	{ co_yield token(Token::op_rem); }
+"+?"	{ co_yield token(Token::op_qplus); }
+"-?"	{ co_yield token(Token::op_qminus); }
+"+%"	{ co_yield token(Token::op_wplus); }
+"-%"	{ co_yield token(Token::op_wminus); }
+"&"	{ co_yield token(Token::op_bitand); }
+"|"	{ co_yield token(Token::op_bitor); }
+"<<"	{ co_yield token(Token::op_lshift); }
+">>"	{ co_yield token(Token::op_rshift); }
+"~"	{ co_yield token(Token::op_compl); }
+"=="	{ co_yield token(Token::op_equal); }
+"!="	{ co_yield token(Token::op_unequal); }
+"<>"	{ co_yield token(Token::op_unequal); }
+"<=>"	{ co_yield token(Token::op_cmp); }
+"<="	{ co_yield token(Token::op_lte); }
+">="	{ co_yield token(Token::op_gte); }
+"<"	{ co_yield token(Token::op_less); }
+">"	{ co_yield token(Token::op_greater); }
+"??"	{ co_yield token(Token::op_qmqm); }
+"?"	{ co_yield token(Token::op_qm); }
 
-{identifier}	{ co_yield {Token::identifier, str()}; }
+{identifier}	{ co_yield token(Token::identifier, str()); }
 
-\p{Unicode}		{ co_yield {Token::unknown, str()}; }
-.					{ co_yield {Token::unknown, str()}; }
+\p{Unicode}		{ co_yield token(Token::unknown, str()); }
+.					{ co_yield token(Token::unknown, str()); }
 
-<<EOF>>			{ co_yield {Token::eof}; co_return; }
+<<EOF>>			{ co_yield token(Token::eof); co_return; }
 
 %%

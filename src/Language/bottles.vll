@@ -8,10 +8,11 @@ proc main(argv, mut stdio)
 	= stdio.out.print("Hello, world!");
 */
 
+let verse = "{1} bottles of beer on the wall. {1} bottles of beer.\nTake one down, pass it around, {2} bottles of beer on the wall.\n";
+
 // Structured syntax
 fn format_verse_s(count)
-	= "{1} bottles of beer on the wall. {1} bottles of beer.\nTake one down, pass it around, {2} bottles of beer on the wall.\n"
-	.format(count, count - 1);
+	= verse.format(count, count - 1);
 
 proc sing_s(mut out) {
 	for count = 99 -> 1 {
@@ -23,7 +24,7 @@ proc sing_s(mut out) {
 
 // Substrate syntax
 fn format_verse_c(count) (:
-	"{1} bottles of beer on the wall. {1} bottles of beer.\nTake one down, pass it around, {2} bottles of beer on the wall.\n" count count 1 - format!3
+	verse count count 1 - format!3
 :)
 
 proc sing_c(mut out) (:

@@ -59,7 +59,7 @@ class tokenizer {
 
 	[[nodiscard]] bool good() const noexcept { return last.good(); }
 	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
-	[[nodiscard]] bool eof() const noexcept { return _cur != _end; }
+	[[nodiscard]] bool eof() const noexcept { return _cur == _end; }
 
  public:
 	// If true, the Token::punct_newline token will be returned for the end of
@@ -80,6 +80,8 @@ class tokenizer {
 
 	void advance();
 };
+
+class Type;
 
 namespace AST {
 
@@ -108,6 +110,7 @@ class Node {
 
 	virtual ~Node() = default;
 
+	Token _tok;
 	vector<unique_ptr<Node>> _attributes;
 };
 
@@ -291,12 +294,14 @@ class Scope;
 class Name {
  public:
 	Name() = default;
-	Name(const Name&);
-	Name(Name&&) = default;
 	Name(string basename, Discriminators discrim)
 	    : _basename(std::move(basename))
 	    , _discrim(std::move(discrim)) {}
 	Name(string basename, const Scope& scope);
+	Name(const Name&);
+	Name(Name&&) = default;
+
+	Name& operator=(Name&&) = default;
 
 	Name& assign(string basename, Discriminators scope);
 	Name& assign(string basename, const Scope& scope);
@@ -344,13 +349,27 @@ class Scope {
 	Name name;
 };
 
+class ImportDecl : public Declaration {
+	std::ostream& pretty_print(std::ostream& os) const override {
+		using namespace std::literals;
+		if (_is_export) {
+			os << "export ";
+		}
+		os << "import " << _name;
+		if (not language.empty() and language != "Vellum"sv) {
+			os << '[' << kblib::quoted(language) << ']';
+		}
+		return os << ";\n";
+	}
+};
+
 class AliasDecl : public Declaration {
  public:
 	unique_ptr<Expr> _type;
 	std::ostream& pretty_print(std::ostream& os) const override {
 		os << "alias " << _name << " = ";
 		assert(_type);
-		return _type->pretty_print(os) << ";";
+		return _type->pretty_print(os) << ";\n";
 	}
 };
 
@@ -391,7 +410,7 @@ class ArgDecl : public VarDecl {
 			os << " = ";
 			_initializer->pretty_print(os);
 		}
-		return os << ";";
+		return os << ",";
 	}
 };
 
@@ -440,7 +459,7 @@ class Operator : public Name {
 	Direction _assoc{};
 	Direction _eval_order{};
 	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "(operator " << static_cast<const Name&>(*this) << ')';
+		return os << "(operator " << static_cast<const Name&>(*this) << ')';
 	}
 };
 
@@ -457,6 +476,8 @@ class IntegerLiteral : public Literal {};
 class FloatLiteral : public Literal {};
 
 class StringLiteral : public Literal {};
+
+class CharLiteral : public Literal {};
 
 class Enumerator : public Literal {
  public:
@@ -526,7 +547,7 @@ class CallExpr : public Expr {
 			assert(arg);
 			arg->pretty_print(os);
 		}
-		os << "))";
+		return os << "))";
 	}
 };
 
@@ -548,7 +569,7 @@ class Block : public Expr {
 			assert(ex);
 			ex->pretty_print(os);
 		}
-		os << "}";
+		return os << "}";
 	}
 };
 
@@ -702,7 +723,7 @@ class FunctionDef : public Prototype {
 	unique_ptr<Node> _body;
 };
 
-struct ModuleImport {
+struct ModuleImportDesc {
 	std::string _name;
 	bool _is_export;
 };
@@ -711,7 +732,7 @@ class Module
     : virtual public Node
     , public Namespace {
  public:
-	vector<ModuleImport> _imports;
+	vector<ModuleImportDesc> _imports;
 	std::ostream& pretty_print(std::ostream& os) const override {
 		os << "module " << _name << ';';
 		for (auto& import : _imports) {
@@ -720,7 +741,10 @@ class Module
 			}
 			os << " import " << import._name << ';';
 		}
-		(void)this->_declarations;
+		for (auto& decl : _declarations) {
+			decl->pretty_print(os) << ";\n";
+		}
+		return os;
 	}
 };
 

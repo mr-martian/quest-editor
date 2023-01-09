@@ -10,9 +10,27 @@ namespace AST {
 
 unique_ptr<AST::SubstrateNode> AST::Node::substrate() const { throw 0; }
 
-Name::Name(const Name&) { throw 0; }
+Name::Name(const Name& other)
+    : _basename(other._basename)
+    , _discrim() {
+	throw 0;
+}
 
-std::ostream& Name::pretty_print(std::ostream& os) const { throw 0; }
+std::ostream& Name::pretty_print(std::ostream& os) const {
+	if (_discrim.signature) {
+		os << '(';
+		_discrim.signature->pretty_print(os);
+		os << ')';
+	}
+	for (auto& s : _discrim.scope) {
+		os << s << "::";
+	}
+	os << _basename;
+	if (_discrim.args) {
+		os << '!' << *_discrim.args;
+	}
+	return os;
+}
 
 Discriminators::~Discriminators() = default;
 

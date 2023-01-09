@@ -3,13 +3,13 @@
 
 module ::= module-definition [module-imports] ns-decl-seq
 
-module-definition ::= ['export'] 'module' module-name new-line
+module-definition ::= ['export'] 'module' module-name ';'
 module-name       ::= identifier
                     | identifier '::' module-name
                     | identifier '::' '{' module-name-list '}'
 module-name-list  ::= module-name
                     | module-name ',' module-name-list
-module-imports    ::= {['export'] 'import' module-name}
+module-imports    ::= {['export'] 'import' module-name ';'}
 
 ns-decl-seq ::= { ['export'] declaration }
 declaration ::= fn-declaration
@@ -144,6 +144,7 @@ balanced-code        ::= identifier balanced-code
                        | '(' balanced-code ')'
                        | '[' balanced-code ']'
                        | '{' balanced-code '}'
+                       | '#[' balanced-code ']'
                        | empty
 
 
@@ -289,5 +290,4 @@ raw-identifier ::= '\p{Letter}[\p{Letter}\p{Digit}_]*'
 identifier ::=
 	raw-identifier - keyword - placeholder-id - reserved-id
 	| '`' raw-identifier '`'
-	| '`' operator-token { operator-token } '`'
-	
+	| '`' token { token - '`' } '`'

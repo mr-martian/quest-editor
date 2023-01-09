@@ -26,10 +26,10 @@
 struct source_location {
 	const char* filename{};
 
-	int line{};
-	int col{};
+	std::size_t line{};
+	std::size_t col{};
 
-	int length{1};
+	std::size_t length{1};
 };
 
 struct Token {
@@ -48,6 +48,9 @@ struct Token {
 		punct_rbrck,    // ]
 		punct_lparen,   // (
 		punct_rparen,   // )
+		punct_substr_b, // (:
+		punct_substr_e, // :)
+		punct_attr,     // #[
 		punct_comma,    // ,
 		punct_semi,     // ;
 		punct_equal,    // =
@@ -56,10 +59,7 @@ struct Token {
 		punct_scope,    // ::
 		punct_bang,     // !
 		punct_dollar,   // $
-		punct_attr,     // #[
 		punct_newline,  // \n
-		punct_substr_b, // (:
-		punct_substr_e, // :)
 
 		op_dot,     // .
 		op_plus,    // +
@@ -237,21 +237,15 @@ constexpr token_class tok_classify(Token::Type t) {
 	// no return here to ensure warning if not all cases covered
 }
 std::string tok_name(Token::Type t);
+std::string tok_name(Token t);
 
 class unexpected : public std::invalid_argument {
  public:
 	Token found;
 	std::string expected;
 
-	static std::string format_str(Token found, std::string expected) {
-		using namespace std::literals;
-		return kblib::concat("expected "sv, expected, "before "sv, found.str);
-	}
+	static std::string format_str(Token found, std::string expected);
 
-	unexpected(const Token& found, Token::Type expected)
-	    : std::invalid_argument(format_str(found, tok_name(expected)))
-	    , found(found)
-	    , expected(tok_name(expected)) {}
 	unexpected(const Token& found, std::string expected)
 	    : std::invalid_argument(format_str(found, expected))
 	    , found(found)
