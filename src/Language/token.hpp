@@ -187,7 +187,7 @@ struct Token {
 
 		identifier,
 
-	} type;
+	} type{unknown};
 
 	std::string str;
 	source_location loc;

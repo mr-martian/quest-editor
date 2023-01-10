@@ -80,4 +80,4 @@ source_group(vellum REGULAR_EXPRESSION ".*\.vll")
 
 add_custom_target(sources ALL
 	DEPENDS interpreter
-	SOURCES "loc_stats.vll" "traits_compare.vll" "bottles.vll" "containers.vll")
+	SOURCES "loc_stats.vll" "traits_compare.vll" "bottles.vll" "containers.vll" "hello.vll")

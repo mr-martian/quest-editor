@@ -22,6 +22,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -79,6 +80,9 @@ class tokenizer {
 	Token next{};
 
 	void advance();
+
+ public:
+	bool _verbose{};
 };
 
 class Type;
@@ -110,7 +114,7 @@ class Node {
 
 	virtual ~Node() = default;
 
-	Token _tok;
+	Token _tok{};
 	vector<unique_ptr<Node>> _attributes;
 };
 
@@ -130,34 +134,46 @@ class BuiltinTypeID : public Expr {
 	    : _name(std::move(name)) {}
 
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << _name;
+		return os << "(Type " << _name << ")";
 	}
 
 	string _name;
 };
 
+class BoolTypeID : public BuiltinTypeID {};
+class ByteTypeID : public BuiltinTypeID {};
+class FailTypeID : public BuiltinTypeID {};
+
 class IntegerTypeID : public BuiltinTypeID {
  public:
 	Integer _width{};
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << 'i' << _width;
+		return os << "(Type " << 'i' << _width << ")";
 	}
 };
 class UnsignedTypeID : public BuiltinTypeID {
  public:
 	Integer _width{};
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << 'u' << _width;
+		return os << "(Type " << 'u' << _width << ")";
 	}
+};
+class FloatTypeID : public BuiltinTypeID {
+ public:
+	enum width {
+		null,
+		Float32 = 32,
+		Float64 = 64,
+	} _width{};
 };
 
 class OwnerTypeID : public BuiltinTypeID {
  public:
 	unique_ptr<Expr> _owned_type;
 	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "owner ";
+		os << "(owner ";
 		if (_owned_type) {
-			return _owned_type->pretty_print(os);
+			return _owned_type->pretty_print(os) << ")";
 		} else {
 			throw 1;
 		}
@@ -167,9 +183,9 @@ class SharedTypeID : public BuiltinTypeID {
  public:
 	unique_ptr<Expr> _owned_type;
 	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "shared ";
+		os << "(shared ";
 		if (_owned_type) {
-			return _owned_type->pretty_print(os);
+			return _owned_type->pretty_print(os) << ")";
 		} else {
 			throw 1;
 		}
@@ -179,80 +195,44 @@ class ArrayTypeID : public BuiltinTypeID {
  public:
 	unique_ptr<Expr> _element_type;
 	vector<optional<Integer>> _bounds;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << '[';
-		auto first = true;
-		for (auto dim : _bounds) {
-			if (not std::exchange(first, false)) {
-				os << ',';
-				if (dim) {
-					os << ' ' << *dim;
-				}
-			} else if (dim) {
-				os << *dim;
-			}
-		}
-		os << ']';
-		if (_element_type) {
-			return _element_type->pretty_print(os);
-		} else {
-			throw 1;
-		}
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
-class TupleTypeID : public Expr {
+class TupleTypeID : public BuiltinTypeID {
  public:
 	vector<unique_ptr<Expr>> _member_types;
 
 	// Node interface
  public:
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "tuple(";
-		auto first = true;
-		for (auto& type : _member_types) {
-			if (not std::exchange(first, false)) {
-				os << ", ";
-			}
-			assert(type);
-			type->pretty_print(os);
-		}
-		return os << ')';
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
-class UnionTypeID : public Expr {
+class UnionTypeID : public BuiltinTypeID {
  public:
 	set<unique_ptr<Expr>> _member_types;
 
 	// Node interface
  public:
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "union(";
-		auto first = true;
-		for (auto& type : _member_types) {
-			if (not std::exchange(first, false)) {
-				os << ", ";
-			}
-			assert(type);
-			type->pretty_print(os);
-		}
-		return os << ')';
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class NoneTypeID : public TupleTypeID {
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << "None";
+		return os << "(Type None)";
 	}
 };
 class NoreturnTypeID : public UnionTypeID {
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << "Noreturn";
+		return os << "(Type Noreturn)";
 	}
 };
 class ThisTypeID : public BuiltinTypeID {
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << "This";
+		return os << "(Type This)";
+	}
+};
+class TypeTypeID : public BuiltinTypeID {
+	std::ostream& pretty_print(std::ostream& os) const override {
+		return os << "(Type Type)";
 	}
 };
 
@@ -314,6 +294,8 @@ class Name {
 
 	string _basename;
 	Discriminators _discrim;
+
+	virtual ~Name() = default;
 };
 
 class NameExpr
@@ -335,9 +317,15 @@ class Declaration : virtual public Node {
 } // namespace AST
 
 namespace std {
+
+template <>
+struct hash<AST::Discriminators> {
+	auto operator()(const AST::Discriminators& discrim) const -> std::size_t;
+};
+
 template <>
 struct hash<AST::Name> {
-	auto operator()(const AST::Name& name) const -> std::size_t { return 0; }
+	auto operator()(const AST::Name& name) const -> std::size_t;
 };
 } // namespace std
 
@@ -350,26 +338,16 @@ class Scope {
 };
 
 class ImportDecl : public Declaration {
-	std::ostream& pretty_print(std::ostream& os) const override {
-		using namespace std::literals;
-		if (_is_export) {
-			os << "export ";
-		}
-		os << "import " << _name;
-		if (not language.empty() and language != "Vellum"sv) {
-			os << '[' << kblib::quoted(language) << ']';
-		}
-		return os << ";\n";
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class AliasDecl : public Declaration {
  public:
 	unique_ptr<Expr> _type;
 	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "alias " << _name << " = ";
+		os << "(alias " << _name << " = ";
 		assert(_type);
-		return _type->pretty_print(os) << ";\n";
+		return _type->pretty_print(os) << ")\n";
 	}
 };
 
@@ -378,6 +356,7 @@ class VarDecl : public Declaration {
 	unique_ptr<Expr> _type;
 	bool _is_mut{};
 	bool _is_const{};
+	bool _is_reference{};
 	unique_ptr<Node> _initializer;
 	std::ostream& pretty_print(std::ostream& os) const override;
 };
@@ -385,62 +364,22 @@ class VarDecl : public Declaration {
 class ArgDecl : public VarDecl {
  public:
 	ArgDecl() { _is_export = false; }
-	bool _is_implicit;
-	bool _is_anonymous;
-	bool _is_generic;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "let ";
-		if (_is_mut) {
-			os << "mut ";
-		}
-		if (_is_const) {
-			os << "const ";
-		}
-		if (_is_implicit) {
-			os << "$";
-		}
-		if (not _is_anonymous) {
-			os << _name;
-		}
-		if (_type) {
-			os << " : ";
-			_type->pretty_print(os);
-		}
-		if (_initializer) {
-			os << " = ";
-			_initializer->pretty_print(os);
-		}
-		return os << ",";
-	}
+	bool _is_implicit{};
+	bool _is_anonymous{};
+	bool _is_generic{};
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class ExprList : public Node {
  public:
 	vector<unique_ptr<Expr>> _elems;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		auto first = true;
-		for (auto& ex : _elems) {
-			if (not std::exchange(first, false)) {
-				os << ", ";
-			}
-			assert(ex);
-			ex->pretty_print(os);
-		}
-		return os;
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class Namespace : public Declaration {
  public:
 	vector<unique_ptr<Declaration>> _declarations;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "namespace " << _name << "{";
-		for (auto& decl : _declarations) {
-			assert(decl);
-			decl->pretty_print(os);
-		}
-		return os << "}";
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 /*
@@ -484,12 +423,12 @@ class Enumerator : public Literal {
 	string _name;
 	unique_ptr<Expr> _value;
 	std::ostream& pretty_print(std::ostream& os) const override {
-		os << _name;
+		os << "(enumerator " << _name;
 		if (_value) {
 			os << " = ";
 			_value->pretty_print(os);
 		}
-		return os;
+		return os << ')';
 	}
 };
 
@@ -503,52 +442,21 @@ class UnaryExpr : public Expr {
  public:
 	unique_ptr<Operator> _op;
 	unique_ptr<Expr> _operand;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << '(';
-		assert(_op);
-		_op->pretty_print(os);
-		assert(_operand);
-		os << ' ';
-		_operand->pretty_print(os);
-		return os << ')';
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class BinaryExpr : public Expr {
  public:
 	unique_ptr<Operator> _op;
 	unique_ptr<Expr> _left, _right;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << '(';
-		assert(_op);
-		_op->pretty_print(os);
-		assert(_left);
-		os << ' ';
-		_left->pretty_print(os);
-		assert(_right);
-		os << ", ";
-		_right->pretty_print(os);
-		return os << ')';
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class CallExpr : public Expr {
  public:
 	unique_ptr<NameExpr> _fun;
 	vector<unique_ptr<Expr>> _args;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		assert(_fun);
-		os << "((" << *_fun << ") (";
-		auto first = true;
-		for (auto& arg : _args) {
-			if (not std::exchange(first, false)) {
-				os << ", ";
-			}
-			assert(arg);
-			arg->pretty_print(os);
-		}
-		return os << "))";
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class RewriteExpr : public Expr {
@@ -559,18 +467,7 @@ class RewriteExpr : public Expr {
 
 class Block : public Expr {
 	vector<unique_ptr<Expr>> _expressions;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "{";
-		auto first = true;
-		for (auto& ex : _expressions) {
-			if (not std::exchange(first, false)) {
-				os << "; ";
-			}
-			assert(ex);
-			ex->pretty_print(os);
-		}
-		return os << "}";
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 class Assignment : public Expr {};
@@ -725,7 +622,7 @@ class FunctionDef : public Prototype {
 
 struct ModuleImportDesc {
 	std::string _name;
-	bool _is_export;
+	bool _is_export{};
 };
 
 class Module
@@ -733,19 +630,7 @@ class Module
     , public Namespace {
  public:
 	vector<ModuleImportDesc> _imports;
-	std::ostream& pretty_print(std::ostream& os) const override {
-		os << "module " << _name << ';';
-		for (auto& import : _imports) {
-			if (import._is_export) {
-				os << " export";
-			}
-			os << " import " << import._name << ';';
-		}
-		for (auto& decl : _declarations) {
-			decl->pretty_print(os) << ";\n";
-		}
-		return os;
-	}
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 /*
@@ -757,7 +642,7 @@ class SubstrateNode : virtual public Node {
 	vector<unique_ptr<Expr>> _terms;
 };
 
-auto parse_module(tokenizer& tk) -> unique_ptr<Module>;
+auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module>;
 
 } // namespace AST
 

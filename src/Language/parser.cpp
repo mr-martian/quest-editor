@@ -5,6 +5,8 @@
  * ****************************************************************************/
 
 #include "ast.hpp"
+#include <iomanip>
+#include <ostream>
 #include LEX_HEADER
 
 // avoid a dynamic_cast without opening up possibility of memory leak
@@ -90,7 +92,7 @@ auto parse_expr(tokenizer& tk, Scope& scope, const Discriminators& context)
 
 auto parse_module_def(tokenizer& tk) -> unique_ptr<Module>;
 /* ns-decl-seq ::=
- * 	{ declaration }
+ * 	{ [ 'export' ] declaration }
  */
 auto parse_ns_decl_seq(tokenizer& tk, Scope& scope, const Declaration& context)
     -> vector<unique_ptr<Declaration>> {
@@ -148,9 +150,8 @@ auto parse_namespace_block(tokenizer& tk, Scope& parent,
  * module-decl-seq ::=
  *		{ [ 'export' ] declaration }
  */
-auto parse_module(tokenizer& tk) -> unique_ptr<Module> {
+auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module> {
 	unique_ptr<Module> root;
-	auto scope = Scope{};
 	if (tk.peek().type == Token::kw_export
 	    or tk.peek().type == Token::kw_module) {
 		root = parse_module_def(tk);
@@ -172,7 +173,7 @@ auto parse_module(tokenizer& tk) -> unique_ptr<Module> {
 			break;
 		}
 	}
-	root->pretty_print(std::cout) << '\n';
+	root->pretty_print(std::cout);
 	while (tk and not tk.eof()) {
 		auto& last
 		    = root->_declarations.emplace_back(parse_decl(tk, scope, *root));
@@ -208,13 +209,18 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
 	return root;
 }
 
+/* extern-declaration ::=
+ *		'extern' [ string-literal ] fn-declaration
+ *		| 'extern' [ string-literal ] '{' ns-decl-seq '}'
+ */
 auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
     -> unique_ptr<Declaration> {
 	const auto& context = outer._name._discrim;
 	unique_ptr<Declaration> decl;
-	string language = tk.gettok_if(Token::literal_string)
-	                      .value_or(Token{Token::literal_string, outer.language})
-	                      .str;
+	string language
+	    = tk.gettok_if(Token::literal_string)
+	          .value_or(Token{Token::literal_string, outer.language, {}})
+	          .str;
 	if (tk.check({Token::kw_fn, Token::kw_proc})) {
 		decl = parse_fn_decl(tk, scope, context);
 		decl->language = language;
@@ -228,6 +234,9 @@ auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	return decl;
 }
 
+/*
+ *
+ */
 auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
     -> unique_ptr<Declaration> {
 	const auto& context = outer._name._discrim;
@@ -276,6 +285,9 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	return decl;
 }
 
+/*
+ *
+ */
 auto parse_initializer(tokenizer& tk, Scope& scope,
                        const Discriminators& context) -> unique_ptr<Node> {
 	if (tk.gettok_if(Token::punct_equal)) {
@@ -290,6 +302,10 @@ auto parse_initializer(tokenizer& tk, Scope& scope,
 	}
 }
 
+/* var-declaration ::=
+ *		'let' [ 'const' ] var-definition var-initializer ';'
+ *		| 'let' 'mut' var-definition [ var-initializer ] ';'
+ */
 auto parse_var_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
     -> unique_ptr<VarDecl> {
 	tk.expect(Token::kw_let);
@@ -304,19 +320,27 @@ auto parse_var_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
 	if (tk.gettok_if(Token::punct_colon)) {
 		decl->_type = parse_expr(tk, scope, context);
 	}
-	if (not tk.gettok_if(Token::punct_semi)) {
+	if (auto tok = tk.gettok_if(Token::punct_semi); not tok) {
 		decl->_initializer = parse_initializer(tk, scope, context);
 		tk.expect(Token::punct_semi);
+	} else if (not decl->_is_mut) {
+		throw unexpected(*tok, "initializer for non-mut variable");
 	}
 	return decl;
 }
 
+/* arg-definition	::=
+ *		arg-name [':' arg-type-constraint]
+ * default-arg ::=
+ *		equal-initializer
+ * arg-name ::=
+ *		identifier
+ */
 auto parse_arg_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
     -> unique_ptr<ArgDecl> {
 	auto decl = std::make_unique<ArgDecl>();
-	bool is_reference{};
 	if (tk.gettok_if(Token::op_bitand)) {
-		is_reference = true;
+		decl->_is_reference = true;
 	}
 	if (tk.gettok_if(Token::kw_mut)) {
 		decl->_is_mut = true;
@@ -337,15 +361,29 @@ auto parse_arg_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
 	if (tk.gettok_if(Token::punct_colon)) {
 		decl->_type = parse_expr(tk, scope, context);
 	}
+	if (tk.check(Token::punct_equal)) {
+		decl->_initializer = parse_initializer(tk, scope, context);
+	}
 	return decl;
 }
 
-auto parse_fn_args(tokenizer& tk, Scope& scope, const Discriminators& context)
+/* fn-signature ::=
+ *		'(' argument-list ')' [return-spec]
+ *		| '(' fn-signature ')'
+ * argument-list ::=
+ *		'(' {arg-definition [default-arg]} ')'
+ * return-spec    ::= '->' type-constraint
+ */
+auto parse_argument_list(tokenizer& tk, Scope& scope,
+                         const Discriminators& context)
     -> vector<unique_ptr<ArgDecl>> {
-	tk.expect(Token::punct_lparen);
 	auto args = vector<unique_ptr<ArgDecl>>{};
 	bool tail{};
-	while (not tk.gettok_if(Token::punct_rparen)) {
+	bool first{true};
+	while (not tk.check({Token::punct_rparen, Token::punct_arrow})) {
+		if (not std::exchange(first, false)) {
+			tk.expect(Token::punct_comma);
+		}
 		args.emplace_back(parse_arg_decl(tk, scope, context));
 		// all implicit arguments must be at end
 		if (tail and not args.back()->_is_implicit) {
@@ -355,27 +393,94 @@ auto parse_fn_args(tokenizer& tk, Scope& scope, const Discriminators& context)
 	}
 	return args;
 }
+/* fn-signature ::=
+ *		'(' argument-list ')' [ '->' type-constraint ]
+ *		| '(' argument-list '->' type-constraint { ',' type-constraint } ')'
+ * capture-desc ::=
+ *		'&' | '{' ? '}'
+ */
+auto parse_signature(tokenizer& tk, Scope& scope, const Discriminators& context)
+    -> unique_ptr<Signature> {
+	auto decl = std::make_unique<Signature>();
+	if (tk.gettok_if(Token::op_bitand)) {
+		decl->_captures.emplace<Signature::ref_tag_t>();
+	} else if (tk.gettok_if(Token::punct_lbrace)) {
+		throw 0;
+	}
+	tk.expect(Token::punct_lparen);
+	decl->_args = parse_argument_list(tk, scope, context);
+	if (tk.gettok_if(Token::punct_rparen)) {
+		if (tk.gettok_if(Token::punct_arrow)) {
+			decl->_returns.emplace_back(parse_expr(tk, scope, context));
+		}
+	} else {
+		tk.expect(Token::punct_arrow);
+		while (not tk.gettok_if(Token::punct_rparen)) {
+			decl->_returns.push_back(parse_expr(tk, scope, context));
+		}
+	}
+	return decl;
+}
 
+auto parse_block(tokenizer& tk, Scope& scope, const Discriminators& context)
+    -> unique_ptr<Block>;
+auto parse_substrate_block(tokenizer& tk, Scope& scope,
+                           const Discriminators& context)
+    -> unique_ptr<SubstrateNode>;
+
+/* fn-declaration ::=
+ * 	prototype fn-body
+ * 	| prototype ';'
+ * prototype ::=
+ *		fn-prologue fn-name fn-signature
+ * anon-prototype ::=
+ *		fn-prologue fn-signature
+ * fn-prologue ::=
+ *		('fn' | 'proc')
+ * fn-body ::=
+ *		block
+ *		| substrate-block
+ *		| '=' expression ';'
+ *		| '=' 'delete' [reason-expr] ';'
+ */
 auto parse_fn_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
     -> unique_ptr<Prototype> {
-	auto decl = std::make_unique<Prototype>();
+	auto decl = std::make_unique<FunctionDef>();
 	auto local_scope = scope;
 	if (tk.gettok_if(Token::kw_fn)) {
 		decl->_is_proc = false;
 	} else if (tk.expect(Token::kw_proc)) {
 		decl->_is_proc = true;
 	}
-	if (tk.gettok_if(Token::op_bitand)) {
-		decl->_signature->_captures.emplace<Signature::ref_tag_t>();
-	} else if (tk.gettok_if(Token::punct_lbrace)) {
-		throw 0;
-	} else {
-		decl->_name._basename = tk.expect(Token::identifier).str;
-	}
-	decl->_signature->_args = parse_fn_args(tk, scope, decl->_name._discrim);
-	tk.expect(Token::punct_arrow);
+	parse_qualified_name(tk, local_scope, decl->_name);
+	decl->_signature = parse_signature(tk, local_scope, decl->_name._discrim);
 
-	throw 0;
+	if (not tk.gettok_if(Token::punct_semi)) {
+		switch (tk.peek().type) {
+		case Token::punct_lbrace: {
+			throw 0;
+			// decl->_body = parse_block(tk, local_scope, context);
+		} break;
+		case Token::kw_substrate:
+		case Token::punct_substr_b: {
+			throw 0;
+			// decl->_body = parse_substrate_block(tk, local_scope, context);
+		} break;
+		case Token::punct_equal: {
+			if (tk.check(Token::kw_delete)) {
+				throw 0;
+			} else {
+				tk.ignore();
+				decl->_body = parse_expr(tk, local_scope, context);
+			}
+		} break;
+		default:
+			throw unexpected(tk.gettok(), "function body or ';'");
+		}
+
+		throw 0;
+	}
+	return decl;
 }
 
 auto parse_control_expr(tokenizer& tk, Scope& scope,
@@ -387,7 +492,7 @@ auto parse_assignment_expr(tokenizer& tk, Scope& scope,
 	throw 0;
 }
 auto parse_block(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Expr> {
+    -> unique_ptr<Block> {
 	throw 0;
 }
 
@@ -432,6 +537,10 @@ auto read_bracketed_expr(tokenizer& tk, Scope& scope,
 	}
 }
 
+/* Parses an unparenthesized expression (which may consist of a single
+ * parenthesized expression)
+ *
+ */
 auto parse_expr(tokenizer& tk, Scope& scope, const Discriminators& context)
     -> unique_ptr<Expr> {
 	std::vector<Token> expr;
@@ -463,6 +572,9 @@ auto parse_expr(tokenizer& tk, Scope& scope, const Discriminators& context)
 			// these tokens cannot be part of the expression:
 		case Token::punct_semi:
 		case Token::punct_comma:
+		case Token::punct_colon:
+		case Token::punct_arrow:
+		case Token::punct_equal:
 		case Token::punct_rbrace:
 		case Token::punct_rbrck:
 		case Token::punct_rparen:
@@ -474,7 +586,9 @@ auto parse_expr(tokenizer& tk, Scope& scope, const Discriminators& context)
 		tk.ignore();
 	}
 end_expr:
-	if (expr.size() == 1) {
+	if (expr.empty()) {
+		throw unexpected(tk.gettok(), "expression");
+	} else if (expr.size() == 1) {
 		switch (expr.front().type) {
 		case Token::identifier: {
 			auto name = std::make_unique<NameExpr>();
@@ -506,12 +620,91 @@ end_expr:
 			name->_text = expr.front().str;
 			return name;
 		} break;
+		case Token::kw_Bool: {
+			auto name = std::make_unique<BoolTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			return name;
+		} break;
+		case Token::kw_Byte: {
+			auto name = std::make_unique<ByteTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			return name;
+		} break;
+		case Token::kw_Fail: {
+			auto name = std::make_unique<FailTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			return name;
+		} break;
+		case Token::kw_Float32: {
+			auto name = std::make_unique<FloatTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			name->_width = FloatTypeID::Float32;
+			return name;
+		} break;
+		case Token::kw_Float64: {
+			auto name = std::make_unique<FloatTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			name->_width = FloatTypeID::Float64;
+			return name;
+		} break;
+		case Token::kw_None: {
+			auto name = std::make_unique<NoneTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			return name;
+		} break;
+		case Token::kw_Noreturn: {
+			auto name = std::make_unique<NoreturnTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			return name;
+		} break;
+		case Token::kw_This: {
+			auto name = std::make_unique<ThisTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			return name;
+		} break;
+		case Token::kw_Type: {
+			auto name = std::make_unique<TypeTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			return name;
+		} break;
+		case Token::id_int: {
+			auto name = std::make_unique<IntegerTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			name->_width = kblib::fromStr<Integer>(
+			    std::string_view{expr.front().str}.substr(1), "Integer");
+			return name;
+		} break;
+		case Token::id_unsigned: {
+			auto name = std::make_unique<UnsignedTypeID>();
+			name->_tok = expr.front();
+			name->_name = expr.front().str;
+			name->_width = kblib::fromStr<Integer>(
+			    std::string_view{expr.front().str}.substr(1), "Integer");
+			return name;
+		} break;
 		default:
 			std::cout << "expression parser NYI\n";
+			std::cout << "Unknown expression category: " << tok_name(expr.front())
+			          << '\n';
 			throw 0;
 		}
 	} else {
 		std::cout << "expression parser NYI\n";
+		std::cout << "Expression tokens: [";
+		for (auto& tok : expr) {
+			std::cout << tok_name(tok) << ", ";
+		}
+		std::cout << "]\n";
 		throw 0;
 	}
 }

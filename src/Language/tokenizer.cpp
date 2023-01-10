@@ -23,285 +23,285 @@ std::string tok_name(Token::Type t) {
 
 	//@literal:string
 	case Token::literal_int:
-		return "integer \"\x1B\"";
+		return "integer '\x1B'";
 	case Token::literal_float:
-		return "floating-point number \"\x1B\"";
+		return "floating-point number '\x1B'";
 	case Token::literal_char:
-		return "character literal '\x1B'";
+		return "character literal \"\x1B\"";
 	case Token::literal_string:
 		return "string literal \x1B";
 
 	//@punct:empty
 	case Token::punct_lbrace:
-		return "{";
+		return "'{'";
 	case Token::punct_rbrace:
-		return "}";
+		return "'}'";
 	case Token::punct_lbrck:
-		return "[";
+		return "'['";
 	case Token::punct_rbrck:
-		return "]";
+		return "']'";
 	case Token::punct_lparen:
-		return "(";
+		return "'('";
 	case Token::punct_rparen:
-		return ")";
+		return "')'";
 	case Token::punct_comma:
-		return ",";
+		return "','";
 	case Token::punct_semi:
-		return ";";
+		return "';'";
 	case Token::punct_equal:
-		return "=";
+		return "'='";
 	case Token::punct_arrow:
-		return "->";
+		return "'->'";
 	case Token::punct_colon:
-		return ":";
+		return "':'";
 	case Token::punct_scope:
-		return "::";
+		return "'::'";
 	case Token::punct_bang:
-		return "!";
+		return "'!'";
 	case Token::punct_dollar:
-		return "$";
+		return "'$'";
 	case Token::punct_attr:
-		return "#[";
+		return "'#['";
 	case Token::punct_newline:
 		return "newline";
 	case Token::punct_substr_b:
-		return "(:";
+		return "'(:'";
 	case Token::punct_substr_e:
-		return ":)";
+		return "':)'";
 
 	//@op:empty
 	case Token::op_dot:
-		return ".";
+		return "'.'";
 	case Token::op_plus:
-		return "+";
+		return "'+'";
 	case Token::op_minus:
-		return "-";
+		return "'-'";
 	case Token::op_times:
-		return "*";
+		return "'*'";
 	case Token::op_div:
-		return "/";
+		return "'/'";
 	case Token::op_rem:
-		return "%";
+		return "'%'";
 	case Token::op_mod:
-		return "mod";
+		return "'mod'";
 	case Token::op_qplus:
-		return "+?";
+		return "'+?'";
 	case Token::op_qminus:
-		return "-?";
+		return "'-?'";
 	case Token::op_wplus:
-		return "+%";
+		return "'+%'";
 	case Token::op_wminus:
-		return "-%";
+		return "'-%'";
 	case Token::op_bitand:
-		return "&";
+		return "'&'";
 	case Token::op_bitor:
-		return "|";
+		return "'|'";
 	case Token::op_carat:
-		return "^";
+		return "'^'";
 	case Token::op_compl:
-		return "~";
+		return "'~'";
 	case Token::op_lshift:
-		return "<<";
+		return "'<<'";
 	case Token::op_rshift:
-		return ">>";
+		return "'>>'";
 	case Token::op_at:
-		return "//@";
+		return "'@'";
 	case Token::op_hash:
-		return "#";
+		return "'#'";
 	case Token::op_pipe:
-		return "|>";
+		return "'|>'";
 	case Token::op_equal:
-		return "==";
+		return "'=='";
 	case Token::op_unequal:
-		return "!=";
+		return "'!='";
 	case Token::op_cmp:
-		return "<=>";
+		return "'<=>'";
 	case Token::op_less:
-		return "<";
+		return "'<'";
 	case Token::op_greater:
-		return ">";
+		return "'>'";
 	case Token::op_lte:
-		return "<=";
+		return "'<='";
 	case Token::op_gte:
-		return ">=";
+		return "'>='";
 	case Token::op_qm:
-		return "?";
+		return "'?'";
 	case Token::op_qmqm:
-		return "??";
+		return "'?\?'";
 
 	case Token::op_assign:
-		return ":=";
+		return "':='";
 	case Token::op_plus_assign:
-		return "+=";
+		return "'+='";
 	case Token::op_minus_assign:
-		return "-=";
+		return "'-='";
 	case Token::op_times_assign:
-		return "*=";
+		return "'*='";
 	case Token::op_div_assign:
-		return "/=";
+		return "'/='";
 	case Token::op_rem_assign:
-		return "%=";
+		return "'%='";
 	case Token::op_qplus_assign:
-		return "+?=";
+		return "'+?='";
 	case Token::op_qminus_assign:
-		return "-?=";
+		return "'-?='";
 	case Token::op_wplus_assign:
-		return "+%=";
+		return "'+%='";
 	case Token::op_wminus_assign:
-		return "-%=";
+		return "'-%='";
 	case Token::op_bitand_assign:
-		return "&=";
+		return "'&='";
 	case Token::op_bitor_assign:
-		return "|=";
+		return "'|='";
 	case Token::op_lshift_assign:
-		return "<<=";
+		return "'<<='";
 	case Token::op_rshift_assign:
-		return ">>=";
+		return "'>>='";
 	case Token::op_mod_assign:
-		return "mod=";
+		return "'mod='";
 	case Token::op_xor_assign:
-		return "xor=";
+		return "'xor='";
 
 	case Token::op_and:
-		return "and";
+		return "'and'";
 	case Token::op_or:
-		return "or";
+		return "'or'";
 	case Token::op_not:
-		return "not";
+		return "'not'";
 	case Token::op_xor:
-		return "xor";
+		return "'xor'";
 
 	//@keyword:empty
 	case Token::kw_Bool:
-		return "Bool";
+		return "'Bool'";
 	case Token::kw_Byte:
-		return "Byte";
+		return "'Byte'";
 	case Token::kw_Fail:
-		return "Fail";
+		return "'Fail'";
 	case Token::kw_Float:
-		return "Float";
+		return "'Float'";
 	case Token::kw_Float32:
-		return "Float32";
+		return "'Float32'";
 	case Token::kw_Float64:
-		return "Float64";
+		return "'Float64'";
 	case Token::kw_Int:
-		return "Int";
+		return "'Int'";
 	case Token::kw_Unsigned:
-		return "Unsigned";
+		return "'Unsigned'";
 	case Token::kw_None:
-		return "None";
+		return "'None'";
 	case Token::kw_Noreturn:
-		return "Noreturn";
+		return "'Noreturn'";
 	case Token::kw_This:
-		return "This";
+		return "'This'";
 	case Token::kw_Type:
-		return "Type";
+		return "'Type'";
 
 	case Token::kw_true:
-		return "true";
+		return "'true'";
 	case Token::kw_false:
-		return "false";
+		return "'false'";
 
 	case Token::kw_module:
-		return "module";
+		return "'module'";
 	case Token::kw_export:
-		return "export";
+		return "'export'";
 	case Token::kw_import:
-		return "import";
+		return "'import'";
 	case Token::kw_alias:
-		return "alias";
+		return "'alias'";
 	case Token::kw_asm:
-		return "asm";
+		return "'asm'";
 	case Token::kw_enum:
-		return "enum";
+		return "'enum'";
 	case Token::kw_fn:
-		return "fn";
+		return "'fn'";
 	case Token::kw_proc:
-		return "proc";
+		return "'proc'";
 	case Token::kw_let:
-		return "let";
+		return "'let'";
 	case Token::kw_const:
-		return "const";
+		return "'const'";
 	case Token::kw_mut:
-		return "mut";
+		return "'mut'";
 	case Token::kw_struct:
-		return "struct";
+		return "'struct'";
 	case Token::kw_trait:
-		return "trait";
+		return "'trait'";
 	case Token::kw_extern:
-		return "extern";
+		return "'extern'";
 	case Token::kw_namespace:
-		return "namespace";
+		return "'namespace'";
 	case Token::kw_substrate:
-		return "substrate";
+		return "'substrate'";
 	case Token::kw_llvm:
-		return "llvm";
+		return "'llvm'";
 
 	case Token::kw_await:
-		return "await";
+		return "'await'";
 	case Token::kw_break:
-		return "break";
+		return "'break'";
 	case Token::kw_consume:
-		return "consume";
+		return "'consume'";
 	case Token::kw_continue:
-		return "continue";
+		return "'continue'";
 	case Token::kw_drop:
-		return "drop";
+		return "'drop'";
 	case Token::kw_match:
-		return "match";
+		return "'match'";
 	case Token::kw_result:
-		return "result";
+		return "'result'";
 	case Token::kw_return:
-		return "return";
+		return "'return'";
 	case Token::kw_yield:
-		return "yield";
+		return "'yield'";
 
 	case Token::kw_as:
-		return "as";
+		return "'as'";
 	case Token::kw_if:
-		return "if";
+		return "'if'";
 	case Token::kw_is:
-		return "is";
+		return "'is'";
 	case Token::kw_else:
-		return "else";
+		return "'else'";
 	case Token::kw_end:
-		return "end";
+		return "'end'";
 	case Token::kw_for:
-		return "for";
+		return "'for'";
 	case Token::kw_do:
-		return "do";
+		return "'do'";
 	case Token::kw_unless:
-		return "unless";
+		return "'unless'";
 	case Token::kw_until:
-		return "until";
+		return "'until'";
 	case Token::kw_while:
-		return "while";
+		return "'while'";
 	case Token::kw_loop:
-		return "loop";
+		return "'loop'";
 	case Token::kw_in:
-		return "in";
+		return "'in'";
 	case Token::kw_typeof:
-		return "typeof";
+		return "'typeof'";
 
 	case Token::kw_defer:
-		return "defer";
+		return "'defer'";
 	case Token::kw_implements:
-		return "implements";
+		return "'implements'";
 	case Token::kw_delete:
-		return "delete";
+		return "'delete'";
 	case Token::kw_private:
-		return "private";
+		return "'private'";
 	case Token::kw_public:
-		return "public";
+		return "'public'";
 
 	case Token::kw_underscore:
-		return "_";
+		return "'_'";
 
 	//@special:uint32_t
 	case Token::id_int:
-		return "\x1B";
+		return "'\x1B'";
 	case Token::id_unsigned:
-		return "\x1B";
+		return "'\x1B'";
 
 	//@identifier:string
 	case Token::reserved_id:
@@ -353,7 +353,7 @@ Token tokenizer::expect(const Token::Type t) {
 	if (auto n = gettok_if(t)) {
 		return *std::move(n);
 	} else {
-		throw unexpected(last, tok_name(Token{t, ""}));
+		throw unexpected(last, tok_name(Token{t, "", {}}));
 	}
 }
 
@@ -365,7 +365,7 @@ Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
 		std::vector<std::string> expected_names(ts.size());
 		std::transform(begin(ts), end(ts), begin(expected_names),
 		               [](Token::Type t) {
-			               return tok_name(Token{t, ""});
+			               return tok_name(Token{t, "", {}});
 		               });
 		auto expected = kblib::join(expected_names, ", or ");
 		throw unexpected(last, expected);
@@ -397,16 +397,11 @@ void tokenizer::advance() {
 		                           flag,     //
 		                           last.str, //
 		                           std::back_inserter(formatted));*/
-		std::cout << "TOKEN: " << last.type << ' '; // << formatted
-		const auto name = tok_name(last.type);
-		for (auto c : name) {
-			if (c == '\x1B') {
-				std::cout << last.str;
-			} else {
-				std::cout << c;
-			}
+		if (_verbose) {
+			std::cout << "TOKEN: " << std::setw(3) << last.type << ' '
+			          << tok_name(last) << '\n'
+			          << std::flush;
 		}
-		std::cout << '\n' << std::flush;
 	}
 	return;
 }

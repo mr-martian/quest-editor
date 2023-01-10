@@ -18,7 +18,7 @@ declaration ::= fn-declaration
               | trait-definition
               | global-var-declaration
               | alias-definition
-              | extern-block
+              | extern-declaration
               | namespace-block
 
 fn-declaration ::= prototype fn-body
@@ -29,7 +29,7 @@ anon-prototype ::= fn-prologue         fn-signature
 fn-signature   ::= argument-list [return-spec]
                  | '(' fn-signature ')'
 return-spec    ::= '->' type-constraint
-fn-prologue    ::= ['extern' [string-literal]] ('fn' | 'proc')
+fn-prologue    ::= ('fn' | 'proc')
 argument-list   ::= '(' {arg-definition [default-arg]} ')'
 arg-definition  ::= arg-name [':' arg-type-constraint]
 
@@ -47,7 +47,8 @@ global-var-declaration ::= 'let' var-definition var-initializer ';'
 
 alias-definition ::= 'alias' identifier '=' type-id ';'
 
-extern-block     ::= 'extern' [string-literal] '{' ns-decl-seq '}'
+extern-declaration ::= 'extern' [ string-literal ] fn-declaration
+                     | 'extern' [ string-literal ] '{' ns-decl-seq '}'
 namespace-block  ::= 'namespace' namespace-id '{' ns-decl-seq '}'
 namespace-id     ::= qualified-name
 

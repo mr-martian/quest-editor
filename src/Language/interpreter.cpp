@@ -50,15 +50,25 @@ int main(int argc, char** argv) try {
 	} else {
 		std::ifstream ifile(file.getValue());
 		tokenizer tk(ifile, file.getValue());
-		auto AST = AST::parse_module(tk);
+		tk._verbose = verbose.getValue();
+		auto scope = AST::Scope{};
+		auto AST = AST::parse_module(tk, scope);
 		AST->pretty_print(std::cout);
 	}
 } catch (int e) {
+	std::clog.flush();
+	std::cout.flush();
 	std::cerr << "Not yet implemented: " << e << '\n';
 } catch (const unexpected& e) {
+	std::clog.flush();
+	std::cout.flush();
 	std::cerr << e.what() << '\n';
 } catch (const std::exception& e) {
+	std::clog.flush();
+	std::cout.flush();
 	std::cerr << e.what() << '\n';
 } catch (...) {
+	std::clog.flush();
+	std::cout.flush();
 	std::cerr << "Unknown exception.\n";
 }

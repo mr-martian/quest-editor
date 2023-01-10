@@ -1,15 +1,32 @@
 module demos;
 
 import std;
+export import foo;
 
 // Hello world is simple:
 /*
 proc main(argv, mut stdio)
 	= stdio.out.print("Hello, world!");
 */
+// Some example function declarations:
+
+fn func1();
+fn func2(arg);
+fn func3() -> None;
+fn func4(arg : i32) -> None;
+fn ns::func5(arg : i32) -> u32;
+proc func6!0() -> This;
+proc func7(arg = 0);
+proc func8(arg : i32 = 0);
+fn func9(arg1, arg2 : u10, arg3) -> None;
+fn func10( -> );
+proc main(argv, &mut stdio) -> None; //*/
 
 let verse = "{1} bottles of beer on the wall. {1} bottles of beer.\nTake one down, pass it around, {2} bottles of beer on the wall.\n";
 
+// function declaration
+export fn format_verse_s(count);
+/*
 // Structured syntax
 fn format_verse_s(count)
 	= verse.format(count, count - 1);
@@ -60,3 +77,4 @@ proc tpk_c(&mut in, &mut out) (:
 	(let mut a : [11]f64)
 	0 11 std::seq ( v -> ){  }
 :)
+//*/

@@ -1,0 +1,10 @@
+module hello;
+
+import std;
+
+proc main(argv, mut stdio);
+
+let str = "Hello world!\n";
+
+proc main(argv, mut stdio)
+	= stdio.out.print(str);
