@@ -88,6 +88,7 @@ class tokenizer {
 class Type;
 
 namespace AST {
+using namespace std::literals;
 
 using Integer = std::int64_t;
 
@@ -116,6 +117,8 @@ class Node {
 
 	Token _tok{};
 	vector<unique_ptr<Node>> _attributes;
+
+	inline static const auto indent_idx = std::ios_base::xalloc();
 };
 
 class Expr : virtual public Node {
@@ -259,12 +262,7 @@ class Signature : virtual public Node {
 struct Discriminators {
 	vector<string> scope;
 	optional<Integer> args;
-	unique_ptr<Signature> signature;
 
-	Discriminators() = default;
-	Discriminators(Discriminators&&) = default;
-	Discriminators& operator=(Discriminators&&) = default;
-	~Discriminators();
 	friend auto operator<=>(const Discriminators&, const Discriminators&)
 	    = default;
 };
@@ -278,10 +276,6 @@ class Name {
 	    : _basename(std::move(basename))
 	    , _discrim(std::move(discrim)) {}
 	Name(string basename, const Scope& scope);
-	Name(const Name&);
-	Name(Name&&) = default;
-
-	Name& operator=(Name&&) = default;
 
 	Name& assign(string basename, Discriminators scope);
 	Name& assign(string basename, const Scope& scope);
@@ -291,11 +285,17 @@ class Name {
 	friend std::ostream& operator<<(std::ostream& os, const Name& name) {
 		return name.pretty_print(os);
 	}
+	static bool must_strop(string id) noexcept;
 
 	string _basename;
 	Discriminators _discrim;
 
 	virtual ~Name() = default;
+
+	Name(const Name&) = default;
+	Name(Name&&) = default;
+	Name& operator=(const Name&) = default;
+	Name& operator=(Name&&) = default;
 };
 
 class NameExpr
@@ -330,16 +330,6 @@ struct hash<AST::Name> {
 } // namespace std
 
 namespace AST {
-
-class Scope {
- public:
-	std::unordered_map<Name, Declaration*> symbols;
-	Name name;
-};
-
-class ImportDecl : public Declaration {
-	std::ostream& pretty_print(std::ostream& os) const override;
-};
 
 class AliasDecl : public Declaration {
  public:
@@ -640,6 +630,74 @@ class Module
 class SubstrateNode : virtual public Node {
  public:
 	vector<unique_ptr<Expr>> _terms;
+};
+
+class Scope {
+ public:
+	struct entity {
+		using type = std::variant<AliasDecl*, EnumDecl*, Namespace*, VarDecl*,
+		                          FunctionDef*, StructProto*, TraitDecl*,
+		                          StructMember*, FunctionMemberDecl*>;
+		constexpr static std::array names = {
+		    "AliasDecl"sv, "EnumDecl"sv,     "Namespace"sv,
+		    "VarDecl"sv,   "FunctionDef"sv,  "StructProto"sv,
+		    "TraitDecl"sv, "StructMember"sv, "FunctionMemberDecl"sv,
+		};
+		type decl;
+		entity(type t)
+		    : decl(t) {}
+		entity() = delete;
+		entity& operator=(type t) {
+			decl = t;
+			return *this;
+		}
+
+		friend std::ostream& operator<<(std::ostream& os, const entity& ent) {
+			auto& d = ent.decl;
+			os << "[" << d.index() << "] ";
+			if (d.valueless_by_exception()) {
+				os << "invalid";
+			} else {
+				assert(d.index() <= entity::names.size());
+				os << entity::names[d.index()];
+			}
+			return os;
+		}
+	};
+
+	std::unordered_map<Name, entity> symbols;
+	Name name;
+	using value_type = decltype(symbols)::value_type;
+	using iterator = decltype(symbols)::iterator;
+
+	std::ostream& pretty_print(std::ostream& os) const;
+
+	template <std::derived_from<Declaration> T>
+	iterator add_name(T* ent) requires requires {
+		std::get<T*>(std::declval<entity&>().decl);
+	}
+	{
+		auto& e_name = ent->Declaration::_name;
+		if (auto existing = symbols.find(e_name); existing != symbols.end()) {
+			throw 1;
+			return existing;
+		} else {
+			auto [s, _] = symbols.insert_or_assign(e_name, ent);
+			assert(_);
+			assert(s != symbols.end());
+			std::clog << "Entity: " << e_name << " is " << s->second << "\n";
+			return s;
+		}
+	}
+	template <std::derived_from<Declaration> T>
+	iterator refine_name(iterator old, T* ent) {
+		symbols.erase(old);
+		return add_name(ent);
+	}
+
+	value_type* find_name(const Name& name);
+
+	~Scope();
 };
 
 auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module>;

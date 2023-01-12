@@ -67,7 +67,7 @@ simple_escape	\\[?0abfnrtv]|\\\"|\\'
 escape_sequence	{simple_escape}|"\\x"([[:xdigit:]][[:xdigit:]]?|"{"[[:xdigit:]]+"}")
 literal_string \"([^"\"\\\n"]|{escape_sequence}|{UCN})*\"
 
-identifier	\p{Letter}[\p{Letter}\p{Digit}_]*
+identifier	\p{Letter}[\p{Letter}\d_]*
 operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 
 %x COMMENT
@@ -77,11 +77,11 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 \n		{ if (_newline_mode) { co_yield token(Token::punct_newline); } }
 \p{Space}+	{ }
 
-'`' {identifier} '`'		{
- co_yield token(Token::identifier, str().substr(1, str().size() - 1));
+"`" {identifier} "`"		{
+ co_yield token(Token::identifier, str().substr(1, str().size() - 2));
 }
-'`' {operator_seq} '`'		{
-	co_yield token(Token::identifier, str().substr(1, str().size() - 1));
+"`" {operator_seq} "`"		{
+	co_yield token(Token::identifier, str().substr(1, str().size() - 2));
 }
 
 "/*"	{ start(COMMENT); }
@@ -117,11 +117,15 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "_"[0-9]+	{ co_yield token(Token::placeholder, str()); }
 "_"      	{ co_yield token(Token::kw_underscore); }
 
+"false"  	{ co_yield token(Token::kw_false); }
+"true"   	{ co_yield token(Token::kw_true); }
+
 "alias"  	{ co_yield token(Token::kw_alias); }
-"asm"    	{ co_yield token(Token::kw_asm); }
 "as"     	{ co_yield token(Token::kw_as); }
+"asm"    	{ co_yield token(Token::kw_asm); }
 "await"		{ co_yield token(Token::kw_await); }
 "break"  	{ co_yield token(Token::kw_break); }
+"const"     { co_yield token(Token::kw_const); }
 "consume"	{ co_yield token(Token::kw_consume); }
 "continue"	{ co_yield token(Token::kw_continue); }
 "defer"  	{ co_yield token(Token::kw_defer); }
@@ -132,18 +136,21 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "end"    	{ co_yield token(Token::kw_end); }
 "enum"    	{ co_yield token(Token::kw_enum); }
 "export"		{ co_yield token(Token::kw_export); }
-"false"  	{ co_yield token(Token::kw_false); }
+"extern"		{ co_yield token(Token::kw_extern); }
 "fn"     	{ co_yield token(Token::kw_fn); }
 "for"    	{ co_yield token(Token::kw_for); }
 "if"     	{ co_yield token(Token::kw_if); }
 "implements"	{ co_yield token(Token::kw_implements); }
 "import" 	{ co_yield token(Token::kw_import); }
+"in"     	{ co_yield token(Token::kw_in); }
 "is"     	{ co_yield token(Token::kw_is); }
 "let"			{ co_yield token(Token::kw_let); }
+"llvm"   	{ co_yield token(Token::kw_llvm); }
 "loop"   	{ co_yield token(Token::kw_loop); }
 "match"  	{ co_yield token(Token::kw_match); }
 "module" 	{ co_yield token(Token::kw_module); }
 "mut"    	{ co_yield token(Token::kw_mut); }
+"namespace"	{ co_yield token(Token::kw_namespace); }
 "private"	{ co_yield token(Token::kw_private); }
 "proc"   	{ co_yield token(Token::kw_proc); }
 "public" 	{ co_yield token(Token::kw_public); }
@@ -152,7 +159,6 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "struct" 	{ co_yield token(Token::kw_struct); }
 "substrate"	{ co_yield token(Token::kw_substrate); }
 "trait"  	{ co_yield token(Token::kw_trait); }
-"true"   	{ co_yield token(Token::kw_true); }
 "typeof" 	{ co_yield token(Token::kw_typeof); }
 "unless" 	{ co_yield token(Token::kw_unless); }
 "until"  	{ co_yield token(Token::kw_until); }

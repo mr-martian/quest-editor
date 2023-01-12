@@ -8,32 +8,49 @@
 
 namespace AST {
 
-unique_ptr<AST::SubstrateNode> AST::Node::substrate() const { throw 0; }
-
-Name::Name(const Name& other)
-    : _basename(other._basename)
-    , _discrim() {
-	// throw 0;
+std::ostream& indent(std::ostream& os) {
+	auto depth = os.iword(Node::indent_idx);
+	return os << kblib::repeat(' ', depth * 2);
 }
+std::ostream& nest(std::ostream& os) {
+	++os.iword(Node::indent_idx);
+	return os;
+}
+std::ostream& unnest(std::ostream& os) {
+	--os.iword(Node::indent_idx);
+	return os;
+}
+
+unique_ptr<AST::SubstrateNode> AST::Node::substrate() const { throw 0; }
 
 std::ostream& Name::pretty_print(std::ostream& os) const {
 	os << "(Name ";
-	if (_discrim.signature) {
-		os << '(';
-		_discrim.signature->pretty_print(os);
-		os << ')';
-	}
 	for (auto& s : _discrim.scope) {
 		os << s << "::";
 	}
-	os << _basename;
+	os << '(';
+	if (must_strop(_basename)) {
+		os << '`' << _basename << '`';
+	} else {
+		os << _basename;
+	}
+	os << ')';
 	if (_discrim.args) {
 		os << '!' << *_discrim.args;
 	}
 	return os << ")";
 }
 
-Discriminators::~Discriminators() = default;
+static const auto reserved_ident_pattern = reflex::Pattern(
+    reflex::Matcher::convert(
+        // R"re( ([^_\p{L}\d]) | (^(\d|_([_A-Z]|[0-9]+$))) )re",
+        R"re( ([^_a-zA-Z0-9]) | (^(\d|_([_A-Z]|[0-9]+$))) )re",
+        reflex::convert_flag::unicode | reflex::convert_flag::lex
+            | reflex::convert_flag::freespace),
+    "rw");
+bool Name::must_strop(std::string id) noexcept {
+	return id.empty() or reflex::Matcher(reserved_ident_pattern, id).scan();
+}
 
 std::ostream& Prototype::pretty_print(std::ostream& os) const {
 	os << "(Prototype ";
@@ -44,13 +61,13 @@ std::ostream& Prototype::pretty_print(std::ostream& os) const {
 		os << "extern " << kblib::quoted(*_linkage) << ' ';
 	}
 	os << (_is_proc ? "proc " : "fn ");
-	_name.pretty_print(os) << "\n\t";
+	_name.pretty_print(os) << "\n" << nest << indent;
 	_signature->pretty_print(os);
-	return os << ")";
+	return os << unnest << ")";
 }
 
 std::ostream& VarDecl::pretty_print(std::ostream& os) const {
-	os << "(let ";
+	os << "(let (";
 	if (_is_reference) {
 		os << "&";
 	}
@@ -60,7 +77,7 @@ std::ostream& VarDecl::pretty_print(std::ostream& os) const {
 	if (_is_const) {
 		os << "const ";
 	}
-	os << _name;
+	os << _name << ')';
 	if (_type) {
 		os << " : ";
 		_type->pretty_print(os);
@@ -75,6 +92,35 @@ std::ostream& VarDecl::pretty_print(std::ostream& os) const {
 			os << " = ";
 			_initializer->pretty_print(os);
 		}
+	}
+	return os << ")";
+}
+
+std::ostream& ArgDecl::pretty_print(std::ostream& os) const {
+	os << "(arg (";
+	if (_is_reference) {
+		os << "&";
+	}
+	if (_is_mut) {
+		os << "mut ";
+	}
+	if (_is_const) {
+		os << "const ";
+	}
+	if (_is_implicit) {
+		os << "$";
+	}
+	if (not _is_anonymous) {
+		os << _name;
+	}
+	os << ')';
+	if (_type) {
+		os << " : ";
+		_type->pretty_print(os);
+	}
+	if (_initializer) {
+		os << " = ";
+		_initializer->pretty_print(os);
 	}
 	return os << ")";
 }
@@ -153,46 +199,6 @@ std::ostream& UnionTypeID::pretty_print(std::ostream& os) const {
 	return os << ')';
 }
 
-std::ostream& ImportDecl::pretty_print(std::ostream& os) const {
-	using namespace std::literals;
-	os << "(import "sv << _name;
-	if (_is_export) {
-		os << "export "sv;
-	}
-	if (not language.empty() and language != "Vellum"sv) {
-		os << '[' << kblib::quoted(language) << ']';
-	}
-	return os << ")\n"sv;
-}
-
-std::ostream& ArgDecl::pretty_print(std::ostream& os) const {
-	os << "(arg ";
-	if (_is_reference) {
-		os << "&";
-	}
-	if (_is_mut) {
-		os << "mut ";
-	}
-	if (_is_const) {
-		os << "const ";
-	}
-	if (_is_implicit) {
-		os << "$";
-	}
-	if (not _is_anonymous) {
-		os << _name;
-	}
-	if (_type) {
-		os << " : ";
-		_type->pretty_print(os);
-	}
-	if (_initializer) {
-		os << " = ";
-		_initializer->pretty_print(os);
-	}
-	return os << ")";
-}
-
 std::ostream& ExprList::pretty_print(std::ostream& os) const {
 	auto first = true;
 	for (auto& ex : _elems) {
@@ -203,15 +209,6 @@ std::ostream& ExprList::pretty_print(std::ostream& os) const {
 		ex->pretty_print(os);
 	}
 	return os;
-}
-
-std::ostream& Namespace::pretty_print(std::ostream& os) const {
-	os << "(namespace " << _name << "{";
-	for (auto& decl : _declarations) {
-		assert(decl);
-		decl->pretty_print(os);
-	}
-	return os << "})";
 }
 
 std::ostream& UnaryExpr::pretty_print(std::ostream& os) const {
@@ -252,16 +249,26 @@ std::ostream& CallExpr::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& Block::pretty_print(std::ostream& os) const {
-	os << "(block {";
+	os << "(block {\n" << nest;
 	auto first = true;
 	for (auto& ex : _expressions) {
 		if (not std::exchange(first, false)) {
-			os << "; ";
+			os << ";\n";
 		}
 		assert(ex);
-		ex->pretty_print(os);
+		ex->pretty_print(os << indent);
 	}
-	return os << "})";
+	return os << unnest << indent << "})";
+}
+
+std::ostream& Namespace::pretty_print(std::ostream& os) const {
+	os << "(namespace " << _name << " {\n" << nest;
+	for (auto& decl : _declarations) {
+		assert(decl);
+		os << indent;
+		decl->pretty_print(os) << '\n';
+	}
+	return os << unnest << indent << "})";
 }
 
 std::ostream& Module::pretty_print(std::ostream& os) const {
@@ -277,18 +284,42 @@ std::ostream& Module::pretty_print(std::ostream& os) const {
 	   }
 	   return os << ")\n"sv;
 	   */
-	os << "(module " << _name << '\n';
+	os << "(module " << _name << '\n' << nest;
 	for (auto& import : _imports) {
-		os << "\t(import " << import._name;
+		os << indent << "(import " << import._name;
 		if (import._is_export) {
 			os << " export";
 		}
 		os << ")\n";
 	}
 	for (auto& decl : _declarations) {
-		decl->pretty_print(os) << ";\n";
+		decl->pretty_print(os << indent) << ";\n";
 	}
-	return os << ")\n";
+	return os << unnest << indent << ")\n";
+}
+
+auto Scope::find_name(const Name& name) -> decltype(symbols)::value_type* {
+	auto it = symbols.find(name);
+	if (it != symbols.end()) {
+		return &*it;
+	} else {
+		return nullptr;
+	}
+}
+
+std::ostream& Scope::pretty_print(std::ostream& os) const {
+	os << "(Scope " << name << " {\n" << nest;
+	for (auto& ent : symbols) {
+		auto& e_name = ent.first;
+		os << indent << "Entity: " << e_name << " is " << ent.second << "\n";
+	}
+	os << unnest << indent << "})\n";
+	return os;
+}
+
+Scope::~Scope() {
+	std::clog << "scope destroyed: ";
+	pretty_print(std::clog);
 }
 
 } // namespace AST

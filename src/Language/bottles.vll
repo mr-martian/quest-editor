@@ -18,15 +18,23 @@ fn ns::func5(arg : i32) -> u32;
 proc func6!0() -> This;
 proc func7(arg = 0);
 proc func8(arg : i32 = 0);
-fn func9(arg1, arg2 : u10, arg3) -> None;
+fn func9(arg1, arg2 : u10, &arg3) -> None;
 fn func10( -> );
 proc main(argv, &mut stdio) -> None; //*/
 
 let verse = "{1} bottles of beer on the wall. {1} bottles of beer.\nTake one down, pass it around, {2} bottles of beer on the wall.\n";
 
+// example of stropping:
+let `strop` : i32 = 0;
+
 // function declaration
 export fn format_verse_s(count);
-/*
+
+namespace ns {
+// redeclaration
+fn func5(arg : i31) -> u32;
+}
+
 // Structured syntax
 fn format_verse_s(count)
 	= verse.format(count, count - 1);

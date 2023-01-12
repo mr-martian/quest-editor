@@ -12,7 +12,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 
 	add_compile_options(-fcoroutines-ts -stdlib=libstdc++)
 	add_compile_options(-Wall -Wextra -pedantic -pedantic-errors
-		-Wconversion -Wno-deprecated-declarations
+		-Wconversion -Wno-deprecated-declarations -Wuninitialized
 		-Wold-style-cast -Wshadow -Wzero-as-null-pointer-constant
 		-Wno-mismatched-tags -Wimplicit-fallthrough -Wno-pragmas)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -20,7 +20,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 
 	add_compile_options(-fcoroutines)
 	add_compile_options(-Wall -Wextra -pedantic -pedantic-errors
-		-Wconversion -Wno-deprecated-declarations
+		-Wconversion -Wno-deprecated-declarations -Wuninitialized
 		-Wold-style-cast -Wshadow -Wzero-as-null-pointer-constant
 		-Wno-mismatched-tags -Wimplicit-fallthrough -Wno-pragmas)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
@@ -28,7 +28,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
 
 	add_compile_options(-fcoroutines)
 	add_compile_options(-Wall -Wextra -pedantic -pedantic-errors
-		-Wconversion -Wno-deprecated-declarations
+		-Wconversion -Wno-deprecated-declarations -Wuninitialized
 		-Wold-style-cast -Wshadow -Wzero-as-null-pointer-constant
 		-Wno-mismatched-tags -Wimplicit-fallthrough -Wno-pragmas)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")

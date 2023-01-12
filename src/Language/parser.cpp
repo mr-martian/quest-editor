@@ -21,7 +21,7 @@ auto make_unique_for_modify(std::unique_ptr<Base>& owner, Args&&... args) {
 namespace AST {
 
 /* qualified-name ::=
- *		[ '::' ] { namespace-id '::' } identifier [ '!' integer-literal ]
+ *		  [ '::' ] { namespace-id '::' } identifier [ '!' integer-literal ]
  *******************************************************************************
  * Returns the token corresponding to the basename of the qualified-name
  * The out-param is because of both Name and NameExpr existing
@@ -69,30 +69,24 @@ auto parse_qualified_name(tokenizer& tk, const Scope& scope, Name& name)
 
 auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& context)
     -> unique_ptr<Declaration>;
-auto parse_var_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<VarDecl>;
-auto parse_fn_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Prototype>;
-auto parse_enum_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<EnumDecl> {
+auto parse_var_decl(tokenizer& tk, Scope& scope) -> unique_ptr<VarDecl>;
+auto parse_fn_decl(tokenizer& tk, Scope& scope) -> unique_ptr<Prototype>;
+auto parse_enum_decl(tokenizer& tk, Scope& scope) -> unique_ptr<EnumDecl> {
 	throw 0;
 }
-auto parse_struct_decl(tokenizer& tk, Scope& scope,
-                       const Discriminators& context)
-    -> unique_ptr<StructProto> {
+auto parse_struct_decl(tokenizer& tk, Scope& scope) -> unique_ptr<StructProto> {
 	throw 0;
 }
-auto parse_trait_decl(tokenizer& tk, Scope& scope,
-                      const Discriminators& context) -> unique_ptr<TraitDecl> {
+auto parse_trait_decl(tokenizer& tk, Scope& scope) -> unique_ptr<TraitDecl> {
 	throw 0;
 }
 
-auto parse_expr(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Expr>;
+auto parse_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Expr>;
 
 auto parse_module_def(tokenizer& tk) -> unique_ptr<Module>;
+
 /* ns-decl-seq ::=
- * 	{ [ 'export' ] declaration }
+ * 	  { [ 'export' ] declaration }
  */
 auto parse_ns_decl_seq(tokenizer& tk, Scope& scope, const Declaration& context)
     -> vector<unique_ptr<Declaration>> {
@@ -105,8 +99,9 @@ auto parse_ns_decl_seq(tokenizer& tk, Scope& scope, const Declaration& context)
 	}
 	return decls;
 }
+
 /* namespace-block ::=
- *		'namespace' qualified-name '{' ns-decl-seq '}'
+ *		  'namespace' qualified-name '{' ns-decl-seq '}'
  */
 auto parse_namespace_block(tokenizer& tk, Scope& parent,
                            const Declaration& outer) -> unique_ptr<Namespace> {
@@ -118,37 +113,36 @@ auto parse_namespace_block(tokenizer& tk, Scope& parent,
 	if (name.type != Token::identifier) {
 		throw unexpected(name, "qualified-name");
 	}
-	if (auto old_name = parent.symbols.find(decl->_name);
-	    old_name != parent.symbols.end()) {
-		if (not dynamic_cast<Namespace*>(old_name->second)) {
+	if (auto old_name = parent.find_name(decl->_name)) {
+		if (not std::get_if<Namespace*>(&old_name->second.decl)) {
 			// redefinition of name as different type of symbol
 			throw 1;
 		}
 	} else {
-		parent.symbols.try_emplace(decl->_name, decl.get());
+		parent.add_name(decl.get());
 	}
-	auto& scope = decl->_name._discrim.scope;
+	auto& scope_name = decl->_name._discrim.scope;
 	// scope.reserve(context.scope.size() + 1);
-	scope = context.scope;
+	scope_name = context.scope;
 	tk.expect(Token::punct_lbrace);
 
 	// the scope of the declarations in the namespace has to include the
 	// namespace name. Doing it in-place saves memory
-	scope.push_back(decl->_name._basename);
+	scope_name.push_back(decl->_name._basename);
 	decl->_declarations = parse_ns_decl_seq(tk, parent, *decl);
 	// remove the redundant name from the scope
-	scope.pop_back();
+	scope_name.pop_back();
 
 	tk.expect(Token::punct_rbrace);
 	return decl;
 }
 
 /* module ::=
- *		module-definition [ module-imports ] module-decl-seq
+ *		  module-definition [ module-imports ] module-decl-seq
  * module-imports ::=
- *		{ [ 'export' ] 'import' module-name ';' }
+ *		  { [ 'export' ] 'import' module-name ';' }
  * module-decl-seq ::=
- *		{ [ 'export' ] declaration }
+ *		  { [ 'export' ] declaration }
  */
 auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module> {
 	unique_ptr<Module> root;
@@ -188,7 +182,7 @@ auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module> {
 }
 
 /* module-definition ::=
- *		[ 'export' ] 'module' module-name ';'
+ *		  [ 'export' ] 'module' module-name ';'
  */
 auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
 	auto root = std::make_unique<Module>();
@@ -210,7 +204,7 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
 }
 
 /* extern-declaration ::=
- *		'extern' [ string-literal ] fn-declaration
+ *		  'extern' [ string-literal ] fn-declaration
  *		| 'extern' [ string-literal ] '{' ns-decl-seq '}'
  */
 auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
@@ -222,7 +216,7 @@ auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	          .value_or(Token{Token::literal_string, outer.language, {}})
 	          .str;
 	if (tk.check({Token::kw_fn, Token::kw_proc})) {
-		decl = parse_fn_decl(tk, scope, context);
+		decl = parse_fn_decl(tk, scope);
 		decl->language = language;
 	} else if (tk.gettok_if(Token::punct_lbrace)) {
 		auto alias = make_unique_for_modify<Namespace>(decl);
@@ -243,7 +237,7 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	unique_ptr<Declaration> decl;
 	switch (tk.peek().type) {
 	case Token::kw_let: {
-		decl = parse_var_decl(tk, scope, context);
+		decl = parse_var_decl(tk, scope);
 	} break;
 	case Token::kw_alias: {
 		auto alias = make_unique_for_modify<AliasDecl>(decl);
@@ -252,23 +246,24 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 		// parse alias declaration
 		alias->_name._basename = tk.expect(Token::identifier).str;
 		tk.expect(Token::punct_equal);
-		alias->_type = parse_expr(tk, scope, context);
+		alias->_type = parse_expr(tk, scope);
+		scope.add_name(alias);
 	} break;
 	case Token::kw_fn:
 	case Token::kw_proc: {
-		decl = parse_fn_decl(tk, scope, context);
+		decl = parse_fn_decl(tk, scope);
 		if (decl->language.empty()) {
 			decl->language = outer.language;
 		}
 	} break;
 	case Token::kw_enum: {
-		decl = parse_enum_decl(tk, scope, context);
+		decl = parse_enum_decl(tk, scope);
 	} break;
 	case Token::kw_struct: {
-		decl = parse_struct_decl(tk, scope, context);
+		decl = parse_struct_decl(tk, scope);
 	} break;
 	case Token::kw_trait: {
-		decl = parse_trait_decl(tk, scope, context);
+		decl = parse_trait_decl(tk, scope);
 	} break;
 	case Token::kw_extern: {
 		decl = parse_extern_decl(tk, scope, outer);
@@ -288,26 +283,24 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 /*
  *
  */
-auto parse_initializer(tokenizer& tk, Scope& scope,
-                       const Discriminators& context) -> unique_ptr<Node> {
+auto parse_initializer(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
 	if (tk.gettok_if(Token::punct_equal)) {
-		return parse_expr(tk, scope, context);
+		return parse_expr(tk, scope);
 	} else {
 		tk.expect(Token::punct_lbrace);
 		auto list = std::make_unique<ExprList>();
 		while (not tk.gettok_if(Token::punct_rbrace)) {
-			list->_elems.push_back(parse_expr(tk, scope, context));
+			list->_elems.push_back(parse_expr(tk, scope));
 		}
 		return list;
 	}
 }
 
 /* var-declaration ::=
- *		'let' [ 'const' ] var-definition var-initializer ';'
+ *		  'let' [ 'const' ] var-definition var-initializer ';'
  *		| 'let' 'mut' var-definition [ var-initializer ] ';'
  */
-auto parse_var_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<VarDecl> {
+auto parse_var_decl(tokenizer& tk, Scope& scope) -> unique_ptr<VarDecl> {
 	tk.expect(Token::kw_let);
 	auto decl = std::make_unique<VarDecl>();
 
@@ -318,26 +311,26 @@ auto parse_var_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
 	}
 	decl->_name._basename = tk.expect(Token::identifier).str;
 	if (tk.gettok_if(Token::punct_colon)) {
-		decl->_type = parse_expr(tk, scope, context);
+		decl->_type = parse_expr(tk, scope);
 	}
 	if (auto tok = tk.gettok_if(Token::punct_semi); not tok) {
-		decl->_initializer = parse_initializer(tk, scope, context);
+		decl->_initializer = parse_initializer(tk, scope);
 		tk.expect(Token::punct_semi);
 	} else if (not decl->_is_mut) {
 		throw unexpected(*tok, "initializer for non-mut variable");
 	}
+	scope.add_name(decl.get());
 	return decl;
 }
 
 /* arg-definition	::=
- *		arg-name [':' arg-type-constraint]
+ *		  arg-name [':' arg-type-constraint]
  * default-arg ::=
- *		equal-initializer
+ *		  equal-initializer
  * arg-name ::=
- *		identifier
+ *		  identifier
  */
-auto parse_arg_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<ArgDecl> {
+auto parse_arg_decl(tokenizer& tk, Scope& scope) -> unique_ptr<ArgDecl> {
 	auto decl = std::make_unique<ArgDecl>();
 	if (tk.gettok_if(Token::op_bitand)) {
 		decl->_is_reference = true;
@@ -359,23 +352,23 @@ auto parse_arg_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
 	}
 	decl->_name._basename = tk.expect(Token::identifier).str;
 	if (tk.gettok_if(Token::punct_colon)) {
-		decl->_type = parse_expr(tk, scope, context);
+		decl->_type = parse_expr(tk, scope);
 	}
 	if (tk.check(Token::punct_equal)) {
-		decl->_initializer = parse_initializer(tk, scope, context);
+		decl->_initializer = parse_initializer(tk, scope);
 	}
+	scope.add_name(decl.get());
 	return decl;
 }
 
 /* fn-signature ::=
- *		'(' argument-list ')' [return-spec]
+ *		  '(' argument-list ')' [return-spec]
  *		| '(' fn-signature ')'
  * argument-list ::=
- *		'(' {arg-definition [default-arg]} ')'
+ *		  '(' {arg-definition [default-arg]} ')'
  * return-spec    ::= '->' type-constraint
  */
-auto parse_argument_list(tokenizer& tk, Scope& scope,
-                         const Discriminators& context)
+auto parse_argument_list(tokenizer& tk, Scope& scope)
     -> vector<unique_ptr<ArgDecl>> {
 	auto args = vector<unique_ptr<ArgDecl>>{};
 	bool tail{};
@@ -384,7 +377,7 @@ auto parse_argument_list(tokenizer& tk, Scope& scope,
 		if (not std::exchange(first, false)) {
 			tk.expect(Token::punct_comma);
 		}
-		args.emplace_back(parse_arg_decl(tk, scope, context));
+		args.emplace_back(parse_arg_decl(tk, scope));
 		// all implicit arguments must be at end
 		if (tail and not args.back()->_is_implicit) {
 			throw 1;
@@ -394,66 +387,77 @@ auto parse_argument_list(tokenizer& tk, Scope& scope,
 	return args;
 }
 /* fn-signature ::=
- *		'(' argument-list ')' [ '->' type-constraint ]
+ *		  '(' argument-list ')' [ '->' type-constraint ]
  *		| '(' argument-list '->' type-constraint { ',' type-constraint } ')'
  * capture-desc ::=
- *		'&' | '{' ? '}'
+ *		  '&' | '{' ? '}'
  */
-auto parse_signature(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Signature> {
+auto parse_signature(tokenizer& tk, Scope& scope) -> unique_ptr<Signature> {
 	auto decl = std::make_unique<Signature>();
+	auto new_scope = scope;
 	if (tk.gettok_if(Token::op_bitand)) {
 		decl->_captures.emplace<Signature::ref_tag_t>();
 	} else if (tk.gettok_if(Token::punct_lbrace)) {
 		throw 0;
 	}
 	tk.expect(Token::punct_lparen);
-	decl->_args = parse_argument_list(tk, scope, context);
+	decl->_args = parse_argument_list(tk, new_scope);
 	if (tk.gettok_if(Token::punct_rparen)) {
 		if (tk.gettok_if(Token::punct_arrow)) {
-			decl->_returns.emplace_back(parse_expr(tk, scope, context));
+			decl->_returns.emplace_back(parse_expr(tk, new_scope));
 		}
 	} else {
 		tk.expect(Token::punct_arrow);
 		while (not tk.gettok_if(Token::punct_rparen)) {
-			decl->_returns.push_back(parse_expr(tk, scope, context));
+			decl->_returns.push_back(parse_expr(tk, new_scope));
 		}
 	}
 	return decl;
 }
 
-auto parse_block(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Block>;
-auto parse_substrate_block(tokenizer& tk, Scope& scope,
-                           const Discriminators& context)
+auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block>;
+auto parse_substrate_block(tokenizer& tk, Scope& scope)
     -> unique_ptr<SubstrateNode>;
 
 /* fn-declaration ::=
- * 	prototype fn-body
+ * 	  prototype fn-body
  * 	| prototype ';'
  * prototype ::=
- *		fn-prologue fn-name fn-signature
+ *		  fn-prologue fn-name fn-signature
  * anon-prototype ::=
- *		fn-prologue fn-signature
+ *		  fn-prologue fn-signature
  * fn-prologue ::=
- *		('fn' | 'proc')
+ *		  ('fn' | 'proc')
  * fn-body ::=
- *		block
+ *		  block
  *		| substrate-block
  *		| '=' expression ';'
  *		| '=' 'delete' [reason-expr] ';'
  */
-auto parse_fn_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Prototype> {
+auto parse_fn_decl(tokenizer& tk, Scope& scope) -> unique_ptr<Prototype> {
 	auto decl = std::make_unique<FunctionDef>();
 	auto local_scope = scope;
+	local_scope.name._basename = "__fn_local";
 	if (tk.gettok_if(Token::kw_fn)) {
 		decl->_is_proc = false;
 	} else if (tk.expect(Token::kw_proc)) {
 		decl->_is_proc = true;
 	}
 	parse_qualified_name(tk, local_scope, decl->_name);
-	decl->_signature = parse_signature(tk, local_scope, decl->_name._discrim);
+	// reparent name to scope
+	{}
+	auto t_name = local_scope.add_name(decl.get());
+	decl->_signature = parse_signature(tk, local_scope);
+
+	if (auto& a = decl->_name._discrim.args;
+	    a && *a != decl->_signature->_args.size()) {
+		throw 1;
+	} else if (not a) {
+		a = decl->_signature->_args.size();
+		local_scope.refine_name(t_name, decl.get());
+	}
+
+	scope.add_name(decl.get());
 
 	if (not tk.gettok_if(Token::punct_semi)) {
 		switch (tk.peek().type) {
@@ -471,7 +475,7 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
 				throw 0;
 			} else {
 				tk.ignore();
-				decl->_body = parse_expr(tk, local_scope, context);
+				decl->_body = parse_expr(tk, local_scope);
 			}
 		} break;
 		default:
@@ -483,23 +487,17 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope, const Discriminators& context)
 	return decl;
 }
 
-auto parse_control_expr(tokenizer& tk, Scope& scope,
-                        const Discriminators& context) -> unique_ptr<Expr> {
+auto parse_control_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Expr> {
 	throw 0;
 }
-auto parse_assignment_expr(tokenizer& tk, Scope& scope,
-                           const Discriminators& context) -> unique_ptr<Expr> {
+auto parse_assignment_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Expr> {
 	throw 0;
 }
-auto parse_block(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Block> {
-	throw 0;
-}
+auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block> { throw 0; }
 
 template <Token::Type begin, Token::Type end>
-auto read_bracketed_expr(tokenizer& tk, Scope& scope,
-                         const Discriminators& context,
-                         std::vector<Token>& expr) -> void {
+auto read_bracketed_expr(tokenizer& tk, Scope& scope, std::vector<Token>& expr)
+    -> void {
 	tk.expect(begin);
 	while (auto& tok = expr.emplace_back(tk.peek())) {
 		if (tok.type == end) {
@@ -513,23 +511,23 @@ auto read_bracketed_expr(tokenizer& tk, Scope& scope,
 			throw 1;
 		case Token::punct_lparen:
 			read_bracketed_expr<Token::punct_lparen, Token::punct_rparen>(
-			    tk, scope, context, expr);
+			    tk, scope, expr);
 			break;
 		case Token::punct_lbrck:
-			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(
-			    tk, scope, context, expr);
+			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(tk, scope,
+			                                                            expr);
 			break;
 		case Token::punct_attr:
-			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(
-			    tk, scope, context, expr);
+			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(tk, scope,
+			                                                           expr);
 			break;
 		case Token::punct_lbrace:
 			read_bracketed_expr<Token::punct_lbrace, Token::punct_rbrace>(
-			    tk, scope, context, expr);
+			    tk, scope, expr);
 			break;
 		case Token::punct_substr_b:
 			read_bracketed_expr<Token::punct_substr_b, Token::punct_substr_e>(
-			    tk, scope, context, expr);
+			    tk, scope, expr);
 			break;
 		default:
 			tk.ignore();
@@ -541,31 +539,30 @@ auto read_bracketed_expr(tokenizer& tk, Scope& scope,
  * parenthesized expression)
  *
  */
-auto parse_expr(tokenizer& tk, Scope& scope, const Discriminators& context)
-    -> unique_ptr<Expr> {
+auto parse_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Expr> {
 	std::vector<Token> expr;
 
 	while (auto& tok = expr.emplace_back(tk.peek())) {
 		switch (tok.type) {
 		case Token::punct_lparen:
 			read_bracketed_expr<Token::punct_lparen, Token::punct_rparen>(
-			    tk, scope, context, expr);
+			    tk, scope, expr);
 			break;
 		case Token::punct_lbrck:
-			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(
-			    tk, scope, context, expr);
+			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(tk, scope,
+			                                                            expr);
 			break;
 		case Token::punct_attr:
-			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(
-			    tk, scope, context, expr);
+			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(tk, scope,
+			                                                           expr);
 			break;
 		case Token::punct_lbrace:
 			read_bracketed_expr<Token::punct_lbrace, Token::punct_rbrace>(
-			    tk, scope, context, expr);
+			    tk, scope, expr);
 			break;
 		case Token::punct_substr_b:
 			read_bracketed_expr<Token::punct_substr_b, Token::punct_substr_e>(
-			    tk, scope, context, expr);
+			    tk, scope, expr);
 			break;
 		default:
 			break;
