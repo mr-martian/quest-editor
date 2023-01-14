@@ -1,3 +1,8 @@
+/* *****************************************************************************
+ * Vellum
+ * Copyright (c) 2023 Bee (@killerbee13), Daniel (@mr-martian), Dusty
+ * (@d-us-vb), Richard (@CodeTriangle)
+ * ****************************************************************************/
 // clang-format off
 %option unicode dotall nodefault
 

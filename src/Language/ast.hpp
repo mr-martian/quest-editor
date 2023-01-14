@@ -1,6 +1,6 @@
 /* *****************************************************************************
  * Vellum
- * Copyright (c) 2022 Bee (@killerbee13), Daniel (@mr-martian), Dusty
+ * Copyright (c) 2023 Bee (@killerbee13), Daniel (@mr-martian), Dusty
  * (@d-us-vb), Richard (@CodeTriangle)
  * ****************************************************************************/
 
@@ -701,6 +701,7 @@ class Scope {
 };
 
 auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module>;
+auto parse_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Expr>;
 
 } // namespace AST
 

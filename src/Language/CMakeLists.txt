@@ -39,8 +39,10 @@ endif()
 
 add_executable(ast_generator ast_generator.cpp)
 
-add_executable(interpreter interpreter.cpp parser.cpp ast.hpp
-	token.hpp tokenizer.cpp ast.cpp lex.yy.cpp lex.yy.h)
+add_executable(interpreter
+	ast.hpp token.hpp
+	interpreter.cpp parser.cpp tokenizer.cpp ast.cpp expressions.cpp
+	lex.yy.cpp lex.yy.h)
 
 add_compile_definitions(
 	"TOKEN_HEADER=<${CMAKE_SOURCE_DIR}/src/Language/token.hpp>"

@@ -1,6 +1,6 @@
 /* *****************************************************************************
  * Vellum
- * Copyright (c) 2022 Bee (@killerbee13), Daniel (@mr-martian), Dusty
+ * Copyright (c) 2023 Bee (@killerbee13), Daniel (@mr-martian), Dusty
  * (@d-us-vb), Richard (@CodeTriangle)
  * ****************************************************************************/
 
