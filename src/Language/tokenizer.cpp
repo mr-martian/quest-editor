@@ -332,13 +332,20 @@ std::string unexpected::format_str(Token found, std::string expected) {
 	return kblib::concat("expected "sv, expected, " before "sv, tok_name(found));
 }
 
-tokenizer::tokenizer(std::istream& in, std::string filename, bool l)
+tokenizer::tokenizer(std::istream& in, std::string filename, bool l,
+                     bool verbose)
     : _lex{std::move(filename), l, in}
     , _c(_lex.lex())
     , _cur(_c.begin())
     , _end(_c.end())
-    , next(*_cur) {
+    , next(*_cur)
+    , _verbose(verbose) {
 	++_cur;
+	if (_verbose) {
+		std::cout << "TOKEN: " << std::setw(3) << next.type << ' '
+		          << tok_name(next) << '\n'
+		          << std::flush;
+	}
 }
 
 std::optional<Token> tokenizer::gettok_if(const Token::Type t) {
@@ -398,8 +405,8 @@ void tokenizer::advance() {
 		                           last.str, //
 		                           std::back_inserter(formatted));*/
 		if (_verbose) {
-			std::cout << "TOKEN: " << std::setw(3) << last.type << ' '
-			          << tok_name(last) << '\n'
+			std::cout << "TOKEN: " << std::setw(3) << next.type << ' '
+			          << tok_name(next) << '\n'
 			          << std::flush;
 		}
 	}

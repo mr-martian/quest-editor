@@ -49,8 +49,7 @@ int main(int argc, char** argv) try {
 		std::cout << "Read " << tokens << " tokens.\n";
 	} else {
 		std::ifstream ifile(file.getValue());
-		tokenizer tk(ifile, file.getValue());
-		tk._verbose = verbose.getValue();
+		tokenizer tk(ifile, file.getValue(), false, verbose.getValue());
 		auto scope = AST::Scope{};
 		auto AST = AST::parse_module(tk, scope);
 		AST->pretty_print(std::cout);

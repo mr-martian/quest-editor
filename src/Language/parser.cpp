@@ -9,15 +9,6 @@
 #include <ostream>
 #include LEX_HEADER
 
-// avoid a dynamic_cast without opening up possibility of memory leak
-template <typename Class, typename Base, typename... Args>
-auto make_unique_for_modify(std::unique_ptr<Base>& owner, Args&&... args) {
-	owner.reset();
-	auto object = new Class(std::forward<Args>(args)...);
-	owner.reset(object);
-	return object;
-}
-
 namespace AST {
 
 /* qualified-name ::=
@@ -104,10 +95,9 @@ auto parse_ns_decl_seq(tokenizer& tk, Scope& scope, const Declaration& context)
 auto parse_namespace_block(tokenizer& tk, Scope& parent,
                            const Declaration& outer) -> unique_ptr<Namespace> {
 	const auto& context = outer._name._discrim;
-	tk.expect(Token::kw_namespace);
-	auto decl = std::make_unique<Namespace>();
-	decl->language = outer.language;
+	auto decl = std::make_unique<Namespace>(tk.expect(Token::kw_namespace));
 	auto name = parse_qualified_name(tk, parent, decl->_name);
+	decl->language = outer.language;
 	if (name.type != Token::identifier) {
 		throw unexpected(name, "qualified-name");
 	}
@@ -183,20 +173,22 @@ auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module> {
  *		  [ 'export' ] 'module' module-name ';'
  */
 auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
-	auto root = std::make_unique<Module>();
+	auto root = unique_ptr<Module>();
 	const auto tok = tk.gettok();
 	switch (tok.type) {
 	case Token::kw_export:
-		root->_is_export = true;
-		tk.expect(Token::kw_module);
+		// This uses raw new because it needs left-to-right evaluation of the
+		// braced-init-list
+		root.reset(new Module{tk.expect(Token::kw_module),
+		                      tk.expect(Token::identifier).str, true});
 		break;
 	case Token::kw_module:
+		root = std::make_unique<Module>(tk.cur(),
+		                                tk.expect(Token::identifier).str, false);
 		break;
 	default:
 		throw unexpected(tok, "module");
 	}
-	const auto name = tk.expect(Token::identifier);
-	root->_name._basename = name.str;
 	tk.expect(Token::punct_semi);
 	return root;
 }
@@ -208,6 +200,7 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
 auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
     -> unique_ptr<Declaration> {
 	const auto& context = outer._name._discrim;
+	auto extern_tok = tk.expect(Token::kw_extern);
 	unique_ptr<Declaration> decl;
 	string language
 	    = tk.gettok_if(Token::literal_string)
@@ -217,8 +210,8 @@ auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 		decl = parse_fn_decl(tk, scope);
 		decl->language = language;
 	} else if (tk.gettok_if(Token::punct_lbrace)) {
-		auto alias = make_unique_for_modify<Namespace>(decl);
-		alias->_name._discrim.scope = context.scope;
+		auto alias = make_unique_for_modify<Namespace>(
+		    decl, std::move(extern_tok), Name("", {context.scope}));
 		alias->language = language;
 		alias->_declarations = parse_ns_decl_seq(tk, scope, *alias);
 		tk.expect(Token::punct_rbrace);
@@ -238,9 +231,8 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 		decl = parse_var_decl(tk, scope);
 	} break;
 	case Token::kw_alias: {
-		auto alias = make_unique_for_modify<AliasDecl>(decl);
-		alias->_name._discrim.scope = context.scope;
-		tk.ignore();
+		auto alias = make_unique_for_modify<AliasDecl>(decl, tk.gettok(),
+		                                               Name("", {context.scope}));
 		// parse alias declaration
 		alias->_name._basename = tk.expect(Token::identifier).str;
 		tk.expect(Token::punct_equal);
@@ -285,8 +277,7 @@ auto parse_initializer(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
 	if (tk.gettok_if(Token::punct_equal)) {
 		return parse_expr(tk, scope);
 	} else {
-		tk.expect(Token::punct_lbrace);
-		auto list = std::make_unique<ExprList>();
+		auto list = std::make_unique<ExprList>(tk.expect(Token::punct_lbrace));
 		while (not tk.gettok_if(Token::punct_rbrace)) {
 			list->_elems.push_back(parse_expr(tk, scope));
 		}
@@ -299,8 +290,7 @@ auto parse_initializer(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
  *		| 'let' 'mut' var-definition [ var-initializer ] ';'
  */
 auto parse_var_decl(tokenizer& tk, Scope& scope) -> unique_ptr<VarDecl> {
-	tk.expect(Token::kw_let);
-	auto decl = std::make_unique<VarDecl>();
+	auto decl = std::make_unique<VarDecl>(tk.expect(Token::kw_let));
 
 	if (tk.gettok_if(Token::kw_mut)) {
 		decl->_is_mut = true;
@@ -329,26 +319,33 @@ auto parse_var_decl(tokenizer& tk, Scope& scope) -> unique_ptr<VarDecl> {
  *		  identifier
  */
 auto parse_arg_decl(tokenizer& tk, Scope& scope) -> unique_ptr<ArgDecl> {
-	auto decl = std::make_unique<ArgDecl>();
+	// auto decl = std::make_unique<ArgDecl>();
+	bool is_reference{};
+	bool is_mut{};
+	bool is_const{};
+	bool is_implicit{};
 	if (tk.gettok_if(Token::op_bitand)) {
-		decl->_is_reference = true;
+		is_reference = true;
 	}
 	if (tk.gettok_if(Token::kw_mut)) {
-		decl->_is_mut = true;
+		is_mut = true;
 	}
 	if (tk.gettok_if(Token::kw_const)) {
-		decl->_is_const = true;
+		is_const = true;
 	}
-	if (decl->_is_mut and decl->_is_const) {
+	if (is_mut and is_const) {
 		throw 1;
 	}
 	if (tk.gettok_if(Token::punct_dollar)) {
-		decl->_is_implicit = true;
-		if (not decl->_is_const) {
+		is_implicit = true;
+		if (not is_const) {
 			throw 1;
 		}
 	}
-	decl->_name._basename = tk.expect(Token::identifier).str;
+	tk.expect(Token::identifier);
+	auto decl = std::make_unique<ArgDecl>(
+	    tk.cur(), Name{tk.cur().str, Discriminators{}}, is_mut, is_const,
+	    is_reference, is_implicit, false, false);
 	if (tk.gettok_if(Token::punct_colon)) {
 		decl->_type = parse_expr(tk, scope);
 	}
@@ -360,8 +357,8 @@ auto parse_arg_decl(tokenizer& tk, Scope& scope) -> unique_ptr<ArgDecl> {
 }
 
 /* fn-signature ::=
- *		  '(' argument-list ')' [return-spec]
- *		| '(' fn-signature ')'
+ *		  '(' argument-list ')' [ '->' type-constraint ]
+ *		| '(' argument-list '->' type-constraint { ',' type-constraint } ')'
  * argument-list ::=
  *		  '(' {arg-definition [default-arg]} ')'
  * return-spec    ::= '->' type-constraint
@@ -388,17 +385,19 @@ auto parse_argument_list(tokenizer& tk, Scope& scope)
  *		  '(' argument-list ')' [ '->' type-constraint ]
  *		| '(' argument-list '->' type-constraint { ',' type-constraint } ')'
  * capture-desc ::=
- *		  '&' | '{' ? '}'
+ *		  ε
+ *		| '&'
+ *		| '{' ? '}'
  */
 auto parse_signature(tokenizer& tk, Scope& scope) -> unique_ptr<Signature> {
-	auto decl = std::make_unique<Signature>();
+	auto decl = std::make_unique<Signature>(
+	    tk.expect({Token::punct_lparen, Token::op_bitand, Token::punct_lbrace}));
 	auto new_scope = scope;
-	if (tk.gettok_if(Token::op_bitand)) {
+	if (tk.was(Token::op_bitand)) {
 		decl->_captures.emplace<Signature::ref_tag_t>();
-	} else if (tk.gettok_if(Token::punct_lbrace)) {
+	} else if (tk.was(Token::punct_lbrace)) {
 		throw 0;
 	}
-	tk.expect(Token::punct_lparen);
 	decl->_args = parse_argument_list(tk, new_scope);
 	if (tk.gettok_if(Token::punct_rparen)) {
 		if (tk.gettok_if(Token::punct_arrow)) {
@@ -433,12 +432,13 @@ auto parse_substrate_block(tokenizer& tk, Scope& scope)
  *		| '=' 'delete' [reason-expr] ';'
  */
 auto parse_fn_decl(tokenizer& tk, Scope& scope) -> unique_ptr<Prototype> {
-	auto decl = std::make_unique<FunctionDef>();
+	auto decl = std::make_unique<FunctionDef>(
+	    tk.expect({Token::kw_fn, Token::kw_proc}));
 	auto local_scope = scope;
 	local_scope.name._basename = "__fn_local";
-	if (tk.gettok_if(Token::kw_fn)) {
+	if (tk.cur().type == Token::kw_fn) {
 		decl->_is_proc = false;
-	} else if (tk.expect(Token::kw_proc)) {
+	} else if (tk.cur().type == Token::kw_proc) {
 		decl->_is_proc = true;
 	}
 	parse_qualified_name(tk, local_scope, decl->_name);

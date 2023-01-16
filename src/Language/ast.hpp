@@ -30,7 +30,8 @@ class tokenizer {
 	using generator_type = asyncpp::generator<Token>;
 
  public:
-	tokenizer(std::istream& is, std::string filename, bool l = false);
+	tokenizer(std::istream& is, std::string filename, bool l = false,
+	          bool verbose = false);
 
 	[[nodiscard]] Token gettok() {
 		advance();
@@ -49,6 +50,10 @@ class tokenizer {
 	[[nodiscard]] bool check(Token::Type t) noexcept { return next.type == t; }
 	[[nodiscard]] bool check(std::initializer_list<Token::Type> ts) noexcept {
 		return std::find(begin(ts), end(ts), next.type) != end(ts);
+	}
+	[[nodiscard]] bool was(Token::Type t) noexcept { return last.type == t; }
+	[[nodiscard]] bool was(std::initializer_list<Token::Type> ts) noexcept {
+		return std::find(begin(ts), end(ts), last.type) != end(ts);
 	}
 
 	tokenizer& ignore() {
@@ -92,23 +97,38 @@ using namespace std::literals;
 
 using Integer = std::int64_t;
 
+using std::make_shared;
+using std::make_unique;
+using std::nullptr_t;
 using std::optional;
+using std::ostream;
+using std::shared_ptr;
 using std::string;
 using std::unique_ptr;
 using std::vector;
 
 template <typename K, typename... Ts>
 using set = std::unordered_set<K, Ts...>;
+template <typename K, typename T, typename... Ts>
+using map = std::unordered_map<K, T, Ts...>;
 
 class SubstrateNode;
 
 class Node {
  public:
-	Node() = default;
+	Node() = delete;
 	Node(const Node&) = delete;
 	Node(Node&&) = delete;
 	Node& operator=(const Node&) = delete;
 	Node& operator=(Node&&) = delete;
+
+	explicit Node(Token&& t)
+	    : _tok(std::move(t)) {}
+	explicit Node(const Token& t)
+	    : _tok(t) {}
+	Node(Token t, vector<unique_ptr<Node>> attr)
+	    : _tok(std::move(t))
+	    , _attributes(std::move(attr)) {}
 
 	virtual unique_ptr<SubstrateNode> substrate() const;
 	virtual std::ostream& pretty_print(std::ostream& os) const = 0;
@@ -119,11 +139,23 @@ class Node {
 	vector<unique_ptr<Node>> _attributes;
 
 	inline static const auto indent_idx = std::ios_base::xalloc();
+
+ protected:
+	Node(nullptr_t) { throw nullptr; }
 };
 
 class Expr : virtual public Node {
  public:
+	using Node::Node;
+	Expr(Token&& t, unique_ptr<Expr> type)
+	    : Node(std::move(t))
+	    , _type(std::move(type)) {}
 	unique_ptr<Expr> _type;
+
+ protected:
+	Expr(nullptr_t, unique_ptr<Expr> type)
+	    : Node(nullptr)
+	    , _type(std::move(type)) {}
 };
 
 /*
@@ -132,20 +164,30 @@ class Expr : virtual public Node {
 
 class BuiltinTypeID : public Expr {
  public:
-	BuiltinTypeID() = default;
-	BuiltinTypeID(std::string name)
-	    : _name(std::move(name)) {}
+	explicit BuiltinTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr)
+	    , _name(_tok.str) {}
+	BuiltinTypeID(Token&& t, string name)
+	    : Node(std::move(t))
+	    , Expr(nullptr)
+	    , _name(name) {}
 
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(Type " << _name << ")";
 	}
 
 	string _name;
-};
 
-class BoolTypeID : public BuiltinTypeID {};
-class ByteTypeID : public BuiltinTypeID {};
-class FailTypeID : public BuiltinTypeID {};
+ protected:
+	BuiltinTypeID()
+	    : Node(nullptr)
+	    , Expr(nullptr) {}
+	explicit BuiltinTypeID(string name)
+	    : Node(nullptr)
+	    , Expr(nullptr)
+	    , _name(name) {}
+};
 
 class IntegerTypeID : public BuiltinTypeID {
  public:
@@ -153,6 +195,19 @@ class IntegerTypeID : public BuiltinTypeID {
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(Type " << 'i' << _width << ")";
 	}
+	explicit IntegerTypeID(Token&& t);
+	explicit IntegerTypeID(Token&& t, Integer width)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str)
+	    , _width(width) {}
+	explicit IntegerTypeID(Token&& t, string str, Integer width)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(std::move(str))
+	    , _width(width) {}
+
+ protected:
+	explicit IntegerTypeID(nullptr_t, string id);
+	explicit IntegerTypeID(nullptr_t, string name, Integer width);
 };
 class UnsignedTypeID : public BuiltinTypeID {
  public:
@@ -160,6 +215,19 @@ class UnsignedTypeID : public BuiltinTypeID {
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(Type " << 'u' << _width << ")";
 	}
+	explicit UnsignedTypeID(Token&& t);
+	explicit UnsignedTypeID(Token&& t, Integer width)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str)
+	    , _width(width) {}
+	explicit UnsignedTypeID(Token&& t, string str, Integer width)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(std::move(str))
+	    , _width(width) {}
+
+ protected:
+	explicit UnsignedTypeID(nullptr_t, string id);
+	explicit UnsignedTypeID(nullptr_t, string name, Integer width);
 };
 class FloatTypeID : public BuiltinTypeID {
  public:
@@ -168,6 +236,19 @@ class FloatTypeID : public BuiltinTypeID {
 		Float32 = 32,
 		Float64 = 64,
 	} _width{};
+	explicit FloatTypeID(Token&& t);
+	explicit FloatTypeID(string id);
+	explicit FloatTypeID(Token&& t, width w)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str)
+	    , _width(w) {}
+	explicit FloatTypeID(Token&& t, string str, width w)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(std::move(str))
+	    , _width(w) {}
+
+ protected:
+	explicit FloatTypeID(nullptr_t, string name, Integer width);
 };
 
 class OwnerTypeID : public BuiltinTypeID {
@@ -199,6 +280,14 @@ class ArrayTypeID : public BuiltinTypeID {
 	unique_ptr<Expr> _element_type;
 	vector<optional<Integer>> _bounds;
 	std::ostream& pretty_print(std::ostream& os) const override;
+	// Should be the '[' token that starts the array spec
+	explicit ArrayTypeID(Token&& t)
+	    : Node(std::move(t)) {}
+
+ protected:
+	ArrayTypeID()
+	    : Node(nullptr)
+	    , BuiltinTypeID() {}
 };
 
 class TupleTypeID : public BuiltinTypeID {
@@ -208,6 +297,18 @@ class TupleTypeID : public BuiltinTypeID {
 	// Node interface
  public:
 	std::ostream& pretty_print(std::ostream& os) const override;
+	// Should be the 'Tuple' or '(' token that starts the tuple-id
+	explicit TupleTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str) {}
+
+ protected:
+	TupleTypeID()
+	    : Node(nullptr)
+	    , BuiltinTypeID() {}
+	explicit TupleTypeID(string str)
+	    : Node(nullptr)
+	    , BuiltinTypeID(std::move(str)) {}
 };
 class UnionTypeID : public BuiltinTypeID {
  public:
@@ -216,24 +317,65 @@ class UnionTypeID : public BuiltinTypeID {
 	// Node interface
  public:
 	std::ostream& pretty_print(std::ostream& os) const override;
+	// Should be the 'Union' token that starts the tuple-id, or else the first
+	// token of the first member type
+	explicit UnionTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , BuiltinTypeID() {}
+
+ protected:
+	UnionTypeID()
+	    : Node(nullptr)
+	    , BuiltinTypeID() {}
+	explicit UnionTypeID(string str)
+	    : Node(nullptr)
+	    , BuiltinTypeID(std::move(str)) {}
 };
 
-class NoneTypeID : public TupleTypeID {
+struct BoolTypeID : public BuiltinTypeID {
+	explicit BoolTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str) {}
+};
+struct ByteTypeID : public BuiltinTypeID {
+	explicit ByteTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str) {}
+};
+struct FailTypeID : public BuiltinTypeID {
+	explicit FailTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str) {}
+};
+
+struct NoneTypeID : public TupleTypeID {
+	explicit NoneTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , TupleTypeID(_tok.str) {}
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(Type None)";
 	}
 };
-class NoreturnTypeID : public UnionTypeID {
+struct NoreturnTypeID : public UnionTypeID {
+	explicit NoreturnTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , UnionTypeID(_tok.str) {}
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(Type Noreturn)";
 	}
 };
-class ThisTypeID : public BuiltinTypeID {
+struct ThisTypeID : public BuiltinTypeID {
+	explicit ThisTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str) {}
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(Type This)";
 	}
 };
-class TypeTypeID : public BuiltinTypeID {
+struct TypeTypeID : public BuiltinTypeID {
+	explicit TypeTypeID(Token&& t)
+	    : Node(std::move(t))
+	    , BuiltinTypeID(_tok.str) {}
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(Type Type)";
 	}
@@ -257,11 +399,15 @@ class Signature : virtual public Node {
 	struct ref_tag_t {};
 	std::variant<std::monostate, ref_tag_t, vector<unique_ptr<Expr>>> _captures;
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// Should be the '(' token that begins the argument list
+	explicit Signature(Token&& t)
+	    : Node(std::move(t)) {}
 };
 
 struct Discriminators {
 	vector<string> scope;
-	optional<Integer> args;
+	optional<Integer> args{};
 
 	friend auto operator<=>(const Discriminators&, const Discriminators&)
 	    = default;
@@ -275,10 +421,12 @@ class Name {
 	Name(string basename, Discriminators discrim)
 	    : _basename(std::move(basename))
 	    , _discrim(std::move(discrim)) {}
-	Name(string basename, const Scope& scope);
+	inline Name(string basename, const Scope& scope,
+	            optional<Integer> args = std::nullopt);
 
 	Name& assign(string basename, Discriminators scope);
-	Name& assign(string basename, const Scope& scope);
+	Name& assign(string basename, const Scope& scope,
+	             optional<Integer> args = std::nullopt);
 
 	friend auto operator<=>(const Name&, const Name&) = default;
 	virtual std::ostream& pretty_print(std::ostream& os) const;
@@ -301,9 +449,17 @@ class Name {
 class NameExpr
     : virtual public Expr
     , public Name {
+ public:
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << static_cast<const Name&>(*this);
 	}
+	explicit NameExpr(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr) {}
+	NameExpr(Token&& t, Name n)
+	    : Node(std::move(t))
+	    , Expr(nullptr)
+	    , Name(std::move(n)) {}
 };
 
 class Declaration : virtual public Node {
@@ -312,6 +468,21 @@ class Declaration : virtual public Node {
 	bool _is_export{};
 	string language;
 	virtual bool is_static_scope() const noexcept { return true; }
+
+	explicit Declaration(Token&& t)
+	    : Node(std::move(t)) {}
+	explicit Declaration(nullptr_t)
+	    : Node(nullptr) {}
+	Declaration(Token&& t, Name n, bool exp = {}, string lang = {})
+	    : Node(std::move(t))
+	    , _name(std::move(n))
+	    , _is_export(exp)
+	    , language(std::move(lang)) {}
+	Declaration(nullptr_t, Name n, bool exp = {}, string lang = {})
+	    : Node(nullptr)
+	    , _name(std::move(n))
+	    , _is_export(exp)
+	    , language(std::move(lang)) {}
 };
 
 } // namespace AST
@@ -339,6 +510,15 @@ class AliasDecl : public Declaration {
 		assert(_type);
 		return _type->pretty_print(os) << ")\n";
 	}
+
+	AliasDecl(Token&& t, Name n)
+	    : Node(std::move(t))
+	    , Declaration(nullptr, std::move(n)) {}
+
+ protected:
+	explicit AliasDecl(Token&& t)
+	    : Node(std::move(t))
+	    , Declaration(nullptr) {}
 };
 
 class VarDecl : public Declaration {
@@ -349,19 +529,80 @@ class VarDecl : public Declaration {
 	bool _is_reference{};
 	unique_ptr<Node> _initializer;
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	VarDecl(Token&& t, Name n, bool exp = false)
+	    : Node(std::move(t))
+	    , Declaration(nullptr, std::move(n), exp) {}
+	VarDecl(Token&& t, Name n, bool mut, bool con, bool ref, bool exp = false)
+	    : Node(std::move(t))
+	    , Declaration(nullptr, std::move(n), exp)
+	    , _is_mut(mut)
+	    , _is_const(con)
+	    , _is_reference(ref) {
+		if (_is_mut and _is_const) {
+			throw 1;
+		}
+	}
+	explicit VarDecl(Token&& t)
+	    : Node(std::move(t))
+	    , Declaration(nullptr) {}
+
+ protected:
+	explicit VarDecl(nullptr_t)
+	    : Node(nullptr)
+	    , Declaration(nullptr) {}
+	explicit VarDecl(nullptr_t, Name n, bool exp = false)
+	    : Node(nullptr)
+	    , Declaration(nullptr, std::move(n), exp) {}
+	VarDecl(nullptr_t, Name n, bool mut, bool con, bool ref, bool exp = false)
+	    : Node(nullptr)
+	    , Declaration(nullptr, std::move(n), exp)
+	    , _is_mut(mut)
+	    , _is_const(con)
+	    , _is_reference(ref) {
+		if (_is_mut and _is_const) {
+			throw 1;
+		}
+	}
 };
 
 class ArgDecl : public VarDecl {
  public:
-	ArgDecl() { _is_export = false; }
+	explicit ArgDecl(Token&& t)
+	    : Node(std::move(t))
+	    , VarDecl(nullptr) {
+		// arguments have no linkage and can't be exported
+		_is_export = false;
+	}
 	bool _is_implicit{};
 	bool _is_anonymous{};
 	bool _is_generic{};
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	ArgDecl(Token&& t, Name n)
+	    : Node(std::move(t))
+	    , VarDecl(nullptr, std::move(n), false) {}
+
+	ArgDecl(Token&& t, Name n, bool mut, bool con, bool ref, bool imp, bool anon,
+	        bool gen)
+	    : Node(std::move(t))
+	    , VarDecl(nullptr, std::move(n), mut, con, ref, false)
+	    , _is_implicit(imp)
+	    , _is_anonymous(anon)
+	    , _is_generic(gen) {}
+
+ protected:
+	explicit ArgDecl(nullptr_t)
+	    : Node(nullptr)
+	    , VarDecl(nullptr) {}
+	ArgDecl(nullptr_t, Name n)
+	    : Node(nullptr)
+	    , VarDecl(nullptr, std::move(n), false) {}
 };
 
 class ExprList : public Node {
  public:
+	using Node::Node;
 	vector<unique_ptr<Expr>> _elems;
 	std::ostream& pretty_print(std::ostream& os) const override;
 };
@@ -370,6 +611,22 @@ class Namespace : public Declaration {
  public:
 	vector<unique_ptr<Declaration>> _declarations;
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	Namespace(Token&& t, Name n, bool exp = false)
+	    : Node(std::move(t))
+	    , Declaration(nullptr, std::move(n), exp) {}
+
+	explicit Namespace(Token&& t)
+	    : Node(std::move(t))
+	    , Declaration(nullptr) {}
+
+ protected:
+	explicit Namespace(nullptr_t)
+	    : Node(nullptr)
+	    , Declaration(nullptr) {}
+	explicit Namespace(nullptr_t, Name n, bool exp = false)
+	    : Node(nullptr)
+	    , Declaration(nullptr, std::move(n), exp) {}
 };
 
 /*
@@ -390,6 +647,10 @@ class Operator : public Name {
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(operator " << static_cast<const Name&>(*this) << ')';
 	}
+	Operator() = default;
+	Operator(Token t);
+	static std::unordered_map<Token::Type, std::pair<Direction, Direction>>
+	    op_traits;
 };
 
 class Literal : public Expr {
@@ -398,6 +659,10 @@ class Literal : public Expr {
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return os << "(literal " << _text << ")";
 	}
+	Literal(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr)
+	    , _text(_tok.str) {}
 };
 
 class IntegerLiteral : public Literal {};
@@ -428,7 +693,19 @@ class BoolKeyword : public Enumerator {};
  * Expressions / Statements
  */
 
-class UnaryExpr : public Expr {
+class PrefixExpr : public Expr {
+ public:
+	unique_ptr<Operator> _op;
+	unique_ptr<Expr> _operand;
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the operator of this prefix expr
+	PrefixExpr(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr)
+	    , _op(make_unique<Operator>(_tok)) {}
+};
+class PostfixExpr : public Expr {
  public:
 	unique_ptr<Operator> _op;
 	unique_ptr<Expr> _operand;
@@ -528,7 +805,7 @@ class MatchExpr : public ControlExpr {
 
 class ResultExpr
     : public ControlExpr
-    , public UnaryExpr {
+    , public PrefixExpr {
  public:
 	string _result_keyword;
 	optional<string> _target_label;
@@ -548,6 +825,23 @@ class Prototype
 
 	bool is_static_scope() const noexcept override { return true; }
 	std::ostream& pretty_print(std::ostream& os) const override;
+	// t should be the fn or proc keyword that starts the prototype
+	Prototype(Token&& t)
+	    : Node(std::move(t))
+	    , Declaration(nullptr)
+	    , Expr(nullptr)
+	    , _is_proc(_tok.type == Token::kw_proc ? true
+	               : _tok.type == Token::kw_fn ? false
+	                                           : throw 1) {}
+
+ protected:
+	Prototype(nullptr_t)
+	    : Node(nullptr)
+	    , Declaration(nullptr)
+	    , Expr(nullptr)
+	    , _is_proc(_tok.type == Token::kw_proc ? true
+	               : _tok.type == Token::kw_fn ? false
+	                                           : throw 1) {}
 };
 
 enum class Protection {
@@ -605,22 +899,11 @@ class TraitDecl : public Declaration {
 
 class FunctionDef : public Prototype {
  public:
-	bool _is_simple{};
 	optional<string> _delete_expr;
 	unique_ptr<Node> _body;
-};
-
-struct ModuleImportDesc {
-	std::string _name;
-	bool _is_export{};
-};
-
-class Module
-    : virtual public Node
-    , public Namespace {
- public:
-	vector<ModuleImportDesc> _imports;
-	std::ostream& pretty_print(std::ostream& os) const override;
+	FunctionDef(Token&& t)
+	    : Node(std::move(t))
+	    , Prototype(nullptr) {}
 };
 
 /*
@@ -630,6 +913,19 @@ class Module
 class SubstrateNode : virtual public Node {
  public:
 	vector<unique_ptr<Expr>> _terms;
+};
+
+struct prefix_parselet_t {
+	auto (*func)(Scope& scope, tokenizer& tk) -> unique_ptr<Expr>;
+	int precedence{};
+	operator decltype(func)() const { return func; }
+};
+struct infix_parselet_t {
+	auto (*func)(Scope& scope, tokenizer& tk, unique_ptr<Expr> left)
+	    -> unique_ptr<Expr>;
+	int precedence{};
+	int subprecedence{precedence};
+	operator decltype(func)() const { return func; }
 };
 
 class Scope {
@@ -695,13 +991,70 @@ class Scope {
 		return add_name(ent);
 	}
 
-	value_type* find_name(const Name& name);
+	value_type* find_name(const Name& name_);
+	std::unordered_map<Token::Type, prefix_parselet_t> _prefix_parselets;
+	std::unordered_map<Token::Type, infix_parselet_t> _infix_parselets;
 
+	void reg1(Token::Type token, prefix_parselet_t parselet) {
+		_prefix_parselets[token] = parselet;
+	}
+	void reg2(Token::Type token, infix_parselet_t parselet) {
+		_infix_parselets[token] = parselet;
+	}
+
+	void reg1(std::initializer_list<Token::Type> tokens,
+	          prefix_parselet_t parselet) {
+		for (auto t : tokens) {
+			reg1(t, parselet);
+		}
+	}
+	void reg2(std::initializer_list<Token::Type> tokens,
+	          infix_parselet_t parselet) {
+		for (auto t : tokens) {
+			reg2(t, parselet);
+		}
+	}
+
+	void default_ops();
+	Scope() { default_ops(); }
 	~Scope();
 };
 
+struct ModuleImportDesc {
+	std::string _name;
+	bool _is_export{};
+};
+
+class Module
+    : virtual public Node
+    , public Namespace {
+ public:
+	vector<ModuleImportDesc> _imports;
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	Module(Token&& t, string str, bool is_export)
+	    : Node(std::move(t))
+	    , Namespace(nullptr, Name(str, Scope()), is_export) {}
+};
+
 auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module>;
-auto parse_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Expr>;
+auto parse_expr(tokenizer& tk, Scope& scope, int bp = 0) -> unique_ptr<Expr>;
+auto parse_qualified_name(tokenizer& tk, const Scope& scope, Name& name)
+    -> Token;
+
+// avoid a dynamic_cast without opening up possibility of memory leak
+template <typename Class, typename Base, typename... Args>
+auto make_unique_for_modify(std::unique_ptr<Base>& owner, Args&&... args) {
+	owner.reset();
+	auto object = new Class(std::forward<Args>(args)...);
+	owner.reset(object);
+	return object;
+}
+
+inline Name::Name(std::string basename, const Scope& scope,
+                  optional<Integer> args)
+    : _basename(basename)
+    , _discrim{scope.name._discrim.scope, args} {}
 
 } // namespace AST
 

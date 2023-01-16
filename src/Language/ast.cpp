@@ -52,6 +52,25 @@ bool Name::must_strop(std::string id) noexcept {
 	return id.empty() or reflex::Matcher(reserved_ident_pattern, id).scan();
 }
 
+IntegerTypeID::IntegerTypeID(Token&& t)
+    : Node(std::move(t)) {
+	auto id = std::string_view(_tok.str);
+	assert(id.size() >= 2);
+	assert(id[0] == 'i');
+	id.remove_prefix(1);
+	_width = kblib::fromStr<Integer>(id, "Integer");
+	assert(_width >= 1);
+}
+UnsignedTypeID::UnsignedTypeID(Token&& t)
+    : Node(std::move(t)) {
+	auto id = std::string_view(_tok.str);
+	assert(id.size() >= 2);
+	assert(id[0] == 'u');
+	id.remove_prefix(1);
+	_width = kblib::fromStr<Integer>(id, "Integer");
+	assert(_width >= 1);
+}
+
 std::ostream& Prototype::pretty_print(std::ostream& os) const {
 	os << "(Prototype ";
 	if (_is_export) {
@@ -211,7 +230,7 @@ std::ostream& ExprList::pretty_print(std::ostream& os) const {
 	return os;
 }
 
-std::ostream& UnaryExpr::pretty_print(std::ostream& os) const {
+std::ostream& PrefixExpr::pretty_print(std::ostream& os) const {
 	os << '(';
 	assert(_op);
 	_op->pretty_print(os);
@@ -298,8 +317,8 @@ std::ostream& Module::pretty_print(std::ostream& os) const {
 	return os << unnest << indent << ")\n";
 }
 
-auto Scope::find_name(const Name& name) -> decltype(symbols)::value_type* {
-	auto it = symbols.find(name);
+auto Scope::find_name(const Name& name_) -> decltype(symbols)::value_type* {
+	auto it = symbols.find(name_);
 	if (it != symbols.end()) {
 		return &*it;
 	} else {
