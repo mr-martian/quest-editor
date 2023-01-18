@@ -184,6 +184,8 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "|="	{ co_yield token(Token::op_bitor_assign); }
 "<<="	{ co_yield token(Token::op_lshift_assign); }
 ">>="	{ co_yield token(Token::op_rshift_assign); }
+"xor=" { co_yield token(Token::op_xor_assign); }
+"⊻="  { co_yield token(Token::op_xor_assign); }
 
 "{"	{ co_yield token(Token::punct_lbrace); }
 "}"	{ co_yield token(Token::punct_rbrace); }
@@ -203,6 +205,7 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "(:"	{ co_yield token(Token::punct_substr_b); }
 ":)"	{ co_yield token(Token::punct_substr_e); }
 
+"..."	{ co_yield token(Token::op_dots); }
 "."	{ co_yield token(Token::op_dot); }
 "^"	{ co_yield token(Token::op_carat); }
 "@"	{ co_yield token(Token::op_at); }
@@ -212,8 +215,10 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "and"	{ co_yield token(Token::op_and); }
 "or"	{ co_yield token(Token::op_or); }
 "not"	{ co_yield token(Token::op_not); }
+"¬"	{ co_yield token(Token::op_not); }
 "mod"	{ co_yield token(Token::op_mod); }
 "xor"	{ co_yield token(Token::op_xor); }
+"⊻"	{ co_yield token(Token::op_xor); }
 "+"	{ co_yield token(Token::op_plus); }
 "-"	{ co_yield token(Token::op_minus); }
 "*"	{ co_yield token(Token::op_times); }
@@ -236,6 +241,7 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 ">="	{ co_yield token(Token::op_gte); }
 "<"	{ co_yield token(Token::op_less); }
 ">"	{ co_yield token(Token::op_greater); }
+"?:"	{ co_yield token(Token::op_orelse); }
 "??"	{ co_yield token(Token::op_qmqm); }
 "?"	{ co_yield token(Token::op_qm); }
 

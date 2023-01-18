@@ -36,7 +36,7 @@ fn func5(arg : i31) -> u32;
 }
 
 // Structured syntax
-fn format_verse_s(count)
+export fn format_verse_s(count)
 	= verse.format(count, count - 1);
 
 proc sing_s(mut out) {
@@ -66,12 +66,12 @@ proc main(argv, mut stdio) {
 
 fn fun(x) = sqrt(abs(x)) + 5 * x.pow(3);
 
-proc tpk(&mut in, &mut out) {
+proc tpk(&mut in_, &mut out) {
 	let mut a : [11]f64;
-	for &mut v in a {
-		in.parse(&v) ?? die("Invalid input (expected number)\n")
+	for &mut v in_ a {
+		in_.parse(&v) ?? die("Invalid input (expected number)\n")
 	}
-	for i,v in rev(enumerate(a)) {
+	for i,v in_ rev(enumerate(a)) {
 		let y = fun(v);
 		if y > 400 {
 			out.print("{} TOO LARGE\n".format(i))
@@ -81,7 +81,7 @@ proc tpk(&mut in, &mut out) {
 	}
 }
 
-proc tpk_c(&mut in, &mut out) (:
+proc tpk_c(&mut in_, &mut out) (:
 	(let mut a : [11]f64)
 	0 11 std::seq ( v -> ){  }
 :)

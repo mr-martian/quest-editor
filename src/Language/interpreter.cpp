@@ -51,13 +51,26 @@ int main(int argc, char** argv) try {
 		std::ifstream ifile(file.getValue());
 		tokenizer tk(ifile, file.getValue(), false, verbose.getValue());
 		auto scope = AST::Scope{};
-		auto AST = AST::parse_module(tk, scope);
-		AST->pretty_print(std::cout);
+		try {
+			auto ast = AST::parse_module(tk, scope);
+			ast->pretty_print(std::cout);
+		} catch (int e) {
+			std::clog.flush();
+			std::cout.flush();
+
+			std::cerr << "Error at/before: " << tk.peek().loc << ": ";
+			std::cerr << tok_name(tk.peek()) << '\n';
+			throw;
+		}
 	}
 } catch (int e) {
 	std::clog.flush();
-	std::cout.flush();
-	std::cerr << "Not yet implemented: " << e << '\n';
+	std::cerr << "Not yet implemented: " << e << ' ';
+	if (e) {
+		std::cerr << "[Error]\n";
+	} else {
+		std::cerr << "[Todo]\n";
+	}
 } catch (const unexpected& e) {
 	std::clog.flush();
 	std::cout.flush();

@@ -50,6 +50,7 @@ struct Token {
 		punct_newline,  // \n
 
 		op_dot,     // .
+		op_dots,    // ...
 		op_plus,    // +
 		op_minus,   // -
 		op_times,   // *
@@ -78,6 +79,7 @@ struct Token {
 		op_gte,     // >=
 		op_qm,      // ?
 		op_qmqm,    // ??
+		op_orelse,  // ?:
 
 		op_assign,        // :=
 		op_plus_assign,   // +=

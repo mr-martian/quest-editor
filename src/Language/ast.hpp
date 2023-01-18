@@ -26,6 +26,14 @@
 #include <unordered_set>
 #include <vector>
 
+inline auto operator<<(std::ostream& os, source_location loc) -> std::ostream& {
+	os << loc.filename << ':' << loc.line << ':' << loc.col;
+	if (loc.length > 1) {
+		os << '-' << loc.col + loc.length;
+	}
+	return os;
+}
+
 class tokenizer {
 	using generator_type = asyncpp::generator<Token>;
 
@@ -434,6 +442,7 @@ class Name {
 		return name.pretty_print(os);
 	}
 	static bool must_strop(string id) noexcept;
+	Name without_args() const { return Name{_basename, {_discrim.scope, {}}}; }
 
 	string _basename;
 	Discriminators _discrim;
@@ -451,7 +460,7 @@ class NameExpr
     , public Name {
  public:
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << static_cast<const Name&>(*this);
+		return Name::pretty_print(os);
 	}
 	explicit NameExpr(Token&& t)
 	    : Node(std::move(t))
@@ -645,7 +654,10 @@ class Operator : public Name {
 	Direction _assoc{};
 	Direction _eval_order{};
 	std::ostream& pretty_print(std::ostream& os) const override {
-		return os << "(operator " << static_cast<const Name&>(*this) << ')';
+		os << "(operator ";
+		// Name::pretty_print(os);
+		os << _basename;
+		return os << ')';
 	}
 	Operator() = default;
 	Operator(Token t);
@@ -663,15 +675,53 @@ class Literal : public Expr {
 	    : Node(std::move(t))
 	    , Expr(nullptr)
 	    , _text(_tok.str) {}
+
+ protected:
+	Literal(string t)
+	    : Node(nullptr)
+	    , Expr(nullptr)
+	    , _text(std::move(t)) {}
 };
 
-class IntegerLiteral : public Literal {};
+class IntegerLiteral : public Literal {
+ public:
+	Integer _value;
 
-class FloatLiteral : public Literal {};
+	IntegerLiteral(Token&& t)
+	    : Node(std::move(t))
+	    , Literal(_tok.str)
+	    , _value(kblib::parse_integer<Integer>(_tok.str)) {}
+};
 
-class StringLiteral : public Literal {};
+class FloatLiteral : public Literal {
+ public:
+	long double _value;
 
-class CharLiteral : public Literal {};
+	FloatLiteral(Token&& t)
+	    : Node(std::move(t))
+	    , Literal(_tok.str)
+	    , _value(kblib::lexical_cast<long double>(_tok.str)) {}
+};
+
+class StringLiteral : public Literal {
+ public:
+	string _value;
+
+	StringLiteral(Token&& t)
+	    : Node(std::move(t))
+	    , Literal(_tok.str)
+	    , _value(_tok.str) {}
+};
+
+class CharLiteral : public Literal {
+ public:
+	string _value;
+
+	CharLiteral(Token&& t)
+	    : Node(std::move(t))
+	    , Literal(_tok.str)
+	    , _value(_tok.str) {}
+};
 
 class Enumerator : public Literal {
  public:
@@ -704,12 +754,38 @@ class PrefixExpr : public Expr {
 	    : Node(std::move(t))
 	    , Expr(nullptr)
 	    , _op(make_unique<Operator>(_tok)) {}
+
+ protected:
+	PrefixExpr(nullptr_t)
+	    : Node(nullptr)
+	    , Expr(nullptr)
+	    , _op(make_unique<Operator>(_tok)) {}
 };
+class RefExpr : public PrefixExpr {
+ public:
+	bool _is_mut{};
+	RefExpr(Token&& t)
+	    : Node(std::move(t))
+	    , PrefixExpr(nullptr) {}
+};
+
 class PostfixExpr : public Expr {
  public:
 	unique_ptr<Operator> _op;
 	unique_ptr<Expr> _operand;
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the operator of this postfix expr
+	PostfixExpr(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr)
+	    , _op(make_unique<Operator>(_tok)) {}
+
+ protected:
+	PostfixExpr(nullptr_t)
+	    : Node(nullptr)
+	    , Expr(nullptr)
+	    , _op(make_unique<Operator>(_tok)) {}
 };
 
 class BinaryExpr : public Expr {
@@ -717,13 +793,35 @@ class BinaryExpr : public Expr {
 	unique_ptr<Operator> _op;
 	unique_ptr<Expr> _left, _right;
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the operator of this infix expr
+	BinaryExpr(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr)
+	    , _op(make_unique<Operator>(_tok)) {}
+
+ protected:
+	BinaryExpr(nullptr_t)
+	    : Node(nullptr)
+	    , Expr(nullptr)
+	    , _op(make_unique<Operator>(_tok)) {}
 };
 
 class CallExpr : public Expr {
  public:
-	unique_ptr<NameExpr> _fun;
+	unique_ptr<Expr> _fun;
 	vector<unique_ptr<Expr>> _args;
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the opening bracket of this call expr's argument list
+	CallExpr(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr) {}
+
+ protected:
+	CallExpr(nullptr_t)
+	    : Node(nullptr)
+	    , Expr(nullptr) {}
 };
 
 class RewriteExpr : public Expr {
@@ -803,12 +901,16 @@ class MatchExpr : public ControlExpr {
  public:
 };
 
-class ResultExpr
-    : public ControlExpr
-    , public PrefixExpr {
+class JumpExpr : public ControlExpr {
  public:
 	string _result_keyword;
 	optional<string> _target_label;
+};
+
+class ResultExpr
+    : public JumpExpr
+    , public PrefixExpr {
+ public:
 };
 
 /*
@@ -858,7 +960,7 @@ class StructProto
 	vector<unique_ptr<ArgDecl>> _args;
 };
 
-class StructMember : public Declaration {};
+class StructMember {};
 
 class DataMemberDecl
     : public StructMember
@@ -881,7 +983,7 @@ class StructTraitImpl : public StructMember {};
 
 class StructDef : public StructProto {
  public:
-	vector<unique_ptr<Declaration>> _members;
+	vector<unique_ptr<StructMember>> _members;
 };
 
 class EnumDecl
@@ -904,40 +1006,99 @@ class FunctionDef : public Prototype {
 	FunctionDef(Token&& t)
 	    : Node(std::move(t))
 	    , Prototype(nullptr) {}
+	std::ostream& pretty_print(std::ostream& os) const override;
+};
+
+class Attribute : public Expr {
+ public:
+	Attribute(Token&& t)
+	    : Node(std::move(t))
+	    , Expr(nullptr) {}
+
+ protected:
+	Attribute(nullptr_t)
+	    : Node(nullptr)
+	    , Expr(nullptr) {}
+
+ public:
+	Name _attr;
+	optional<vector<unique_ptr<Expr>>> _args;
+	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
 /*
  * Substrate
  */
 
-class SubstrateNode : virtual public Node {
+class SubstrateNode : virtual public Expr {
  public:
 	vector<unique_ptr<Expr>> _terms;
 };
 
 struct prefix_parselet_t {
 	auto (*func)(Scope& scope, tokenizer& tk) -> unique_ptr<Expr>;
-	int precedence{};
+	int bp{};
 	operator decltype(func)() const { return func; }
 };
 struct infix_parselet_t {
 	auto (*func)(Scope& scope, tokenizer& tk, unique_ptr<Expr> left)
 	    -> unique_ptr<Expr>;
-	int precedence{};
-	int subprecedence{precedence};
+	int bp_l{};
+	int bp_r{bp_l};
 	operator decltype(func)() const { return func; }
+};
+
+class OverloadSet {
+ public:
+	auto members() const -> const std::vector<FunctionDef*>& { return _members; }
+
+	auto insert(FunctionDef* f) -> std::size_t;
+	auto refine(FunctionDef* f) -> std::size_t;
+	auto get(const Name& name) const -> FunctionDef*;
+	auto get(std::optional<std::size_t>) const -> FunctionDef*;
+	auto lookup(const Name& name) const
+	    -> std::variant<std::monostate, std::nullopt_t, std::size_t>;
+
+	OverloadSet() = default;
+	OverloadSet(FunctionDef* singular)
+	    : _members{}
+	    , _fn_unknown{} {
+		assert(singular);
+		if (auto args = singular->_name._discrim.args) {
+			_members.push_back(singular);
+		} else {
+			_fn_unknown = singular;
+		}
+		return;
+	}
+
+ private:
+	std::vector<FunctionDef*> _members;
+	FunctionDef* _fn_unknown;
+	friend class Scope;
+
+	auto find(const Name& name) -> decltype(_members)::iterator {
+		return std::find_if(_members.begin(), _members.end(),
+		                    [&](FunctionDef* f) { return f->_name == name; });
+	}
+	auto find(const Name& name) const -> decltype(_members)::const_iterator {
+		return std::find_if(_members.begin(), _members.end(),
+		                    [&](FunctionDef* f) { return f->_name == name; });
+	}
 };
 
 class Scope {
  public:
 	struct entity {
-		using type = std::variant<AliasDecl*, EnumDecl*, Namespace*, VarDecl*,
-		                          FunctionDef*, StructProto*, TraitDecl*,
-		                          StructMember*, FunctionMemberDecl*>;
+		using type
+		    = std::variant<AliasDecl*, EnumDecl*, Namespace*, VarDecl*,
+		                   FunctionDef*, StructProto*, TraitDecl*,
+		                   DataMemberDecl*, FunctionMemberDecl*, OverloadSet>;
 		constexpr static std::array names = {
-		    "AliasDecl"sv, "EnumDecl"sv,     "Namespace"sv,
-		    "VarDecl"sv,   "FunctionDef"sv,  "StructProto"sv,
-		    "TraitDecl"sv, "StructMember"sv, "FunctionMemberDecl"sv,
+		    "AliasDecl"sv,   "EnumDecl"sv,       "Namespace"sv,
+		    "VarDecl"sv,     "FunctionDef"sv,    "StructProto"sv,
+		    "TraitDecl"sv,   "DataMemberDecl"sv, "FunctionMemberDecl"sv,
+		    "OverloadSet"sv,
 		};
 		type decl;
 		entity(type t)
@@ -964,7 +1125,11 @@ class Scope {
 	std::unordered_map<Name, entity> symbols;
 	Name name;
 	using value_type = decltype(symbols)::value_type;
-	using iterator = decltype(symbols)::iterator;
+	struct iterator {
+		decltype(symbols)::iterator _val;
+		// Represents either nothing, the _fn_unknown, or the index in _members
+		std::variant<std::monostate, std::nullopt_t, std::size_t> _subindex;
+	};
 
 	std::ostream& pretty_print(std::ostream& os) const;
 
@@ -973,27 +1138,54 @@ class Scope {
 		std::get<T*>(std::declval<entity&>().decl);
 	}
 	{
+		auto [i, n] = do_add_name(ent);
+		assert(n);
+		return i;
+	}
+
+	iterator add_name(FunctionDef* ent);
+
+ private:
+	template <typename T>
+	auto do_add_name(T* ent) -> std::pair<iterator, bool> {
+		assert(ent);
 		auto& e_name = ent->Declaration::_name;
 		if (auto existing = symbols.find(e_name); existing != symbols.end()) {
-			throw 1;
-			return existing;
+			if (std::holds_alternative<FunctionDef*>(existing->second.decl)) {
+				return {{existing, std::monostate{}}, false};
+			} else if (auto ov
+			           = std::get_if<OverloadSet>(&existing->second.decl)) {
+				auto idx = ov->lookup(e_name);
+				assert(std::holds_alternative<std::nullopt_t>(idx));
+				return {{existing, idx}, false};
+			} else {
+				throw 1;
+				return {{existing, std::monostate{}}, false};
+			}
 		} else {
 			auto [s, _] = symbols.insert_or_assign(e_name, ent);
 			assert(_);
 			assert(s != symbols.end());
 			std::clog << "Entity: " << e_name << " is " << s->second << "\n";
-			return s;
+			return {{s, std::monostate{}}, true};
 		}
 	}
+
+	iterator add_name(Declaration* ent);
+
+ public:
 	template <std::derived_from<Declaration> T>
 	iterator refine_name(iterator old, T* ent) {
-		symbols.erase(old);
+		symbols.erase(old._val);
 		return add_name(ent);
 	}
+	iterator refine_name(iterator old, FunctionDef* ent);
 
 	value_type* find_name(const Name& name_);
 	std::unordered_map<Token::Type, prefix_parselet_t> _prefix_parselets;
 	std::unordered_map<Token::Type, infix_parselet_t> _infix_parselets;
+	std::vector<std::vector<Token::Type>> _prefix_precedence_classes;
+	std::vector<std::vector<Token::Type>> _infix_precedence_classes;
 
 	void reg1(Token::Type token, prefix_parselet_t parselet) {
 		_prefix_parselets[token] = parselet;
@@ -1023,6 +1215,7 @@ class Scope {
 struct ModuleImportDesc {
 	std::string _name;
 	bool _is_export{};
+	vector<unique_ptr<Node>> _attributes;
 };
 
 class Module
@@ -1038,9 +1231,12 @@ class Module
 };
 
 auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module>;
-auto parse_expr(tokenizer& tk, Scope& scope, int bp = 0) -> unique_ptr<Expr>;
+auto parse_expr(tokenizer& tk, Scope& scope,
+                std::initializer_list<Token::Type> end_tok_types = {},
+                int bp = 0) -> unique_ptr<Expr>;
 auto parse_qualified_name(tokenizer& tk, const Scope& scope, Name& name)
     -> Token;
+auto parse_attr_seq(tokenizer& tk, Scope& scope) -> vector<unique_ptr<Node>>;
 
 // avoid a dynamic_cast without opening up possibility of memory leak
 template <typename Class, typename Base, typename... Args>

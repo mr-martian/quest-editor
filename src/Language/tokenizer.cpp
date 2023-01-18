@@ -72,6 +72,8 @@ std::string tok_name(Token::Type t) {
 	//@op:empty
 	case Token::op_dot:
 		return "'.'";
+	case Token::op_dots:
+		return "'...'";
 	case Token::op_plus:
 		return "'+'";
 	case Token::op_minus:
@@ -128,6 +130,8 @@ std::string tok_name(Token::Type t) {
 		return "'?'";
 	case Token::op_qmqm:
 		return "'?\?'";
+	case Token::op_orelse:
+		return "'?:'";
 
 	case Token::op_assign:
 		return "':='";

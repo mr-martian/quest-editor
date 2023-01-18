@@ -1,10 +1,6 @@
 Operators by precedence:
     0:  a::b, a.b               id-expression               	L
     1:  (a), fn() = ;, fn(){}	primary-expression		*
-    17: match a {}, 		match-expression		*
-    18: if a {},
-	if a {} else b {},	if-expression			R
-    19: for/while/do/loop	loop-expression             	L
     2:  a(b), a[b], a...,
         a^,                     postfix-expression          	L
     3:  +a, -a, ~a,
@@ -15,7 +11,7 @@ Operators by precedence:
     6:  a<<b, a>>b,             bitshift-expression         	L
     7:  a&b                     bitwise-and                 	L
     8:  a|b, a^b                bitwise-or                  	L
-    9:  not a
+    9:  not a                   not-expr                        R
     10: ==, !=, <=>, <, <=, >,
 	>=			comparison-expression       	*
     11: and                     and-expression              	L
@@ -24,9 +20,13 @@ Operators by precedence:
     ??: |>			rewrite-expression		R
     14: a ? b : c, a ?: b       conditional-expression      	R
     15: a, b                    expression-list             	L
-    16: return a, yield a,
+    16: a if b else c		inverted-if-expression	    	R
+    17: match a {}, 		match-expression		*
+    18: if a {},
+	if a {} else b {},	if-expression			R
+    19: for/while/do/loop	loop-expression             	L
+    20: return a, yield a,
 	break a, continue	exit-expression             	L
-    20: a if b else c		inverted-if-expression	    	R
 	
     99: a := b                  assignment-statement        	R
 	(not an expression)

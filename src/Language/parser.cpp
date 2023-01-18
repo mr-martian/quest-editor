@@ -11,6 +11,49 @@
 
 namespace AST {
 
+auto parse_attr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
+	Name name;
+	auto ret = make_unique<Attribute>(parse_qualified_name(tk, scope, name));
+	ret->_attr = std::move(name);
+
+	if (tk.gettok_if(Token::punct_lparen)) {
+		ret->_args.emplace();
+		while (auto arg = parse_expr(tk, scope,
+		                             {Token::punct_comma, Token::punct_rparen})) {
+			ret->_args->push_back(std::move(arg));
+			if (tk.gettok_if(Token::punct_rparen)) {
+				break;
+			} else {
+				tk.expect(Token::punct_comma);
+			}
+		}
+	}
+
+	return ret;
+}
+
+/* attribute-seq ::=
+ *		  '#[' attribute	{ ',' attribute } ']'
+ * attribute ::=
+ *		qualified-name [ '(' attribute-argument-list ')' ]
+ * attribute-argument-list ::=
+ *		  expression
+ *		| expression ',' attribute-argument-list
+ */
+auto parse_attr_seq(tokenizer& tk, Scope& scope) -> vector<unique_ptr<Node>> {
+	if (tk.gettok_if(Token::punct_attr)) {
+		vector<unique_ptr<Node>> ret;
+		auto attr = parse_attr(tk, scope);
+		do {
+			ret.push_back(std::move(attr));
+		} while (tk.gettok_if(Token::punct_comma)
+		         and (attr = parse_attr(tk, scope)));
+		return ret;
+	} else {
+		return {};
+	}
+}
+
 /* qualified-name ::=
  *		  [ '::' ] { namespace-id '::' } identifier [ '!' integer-literal ]
  *******************************************************************************
@@ -58,21 +101,29 @@ auto parse_qualified_name(tokenizer& tk, const Scope& scope, Name& name)
 	}
 }
 
-auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& context)
-    -> unique_ptr<Declaration>;
-auto parse_var_decl(tokenizer& tk, Scope& scope) -> unique_ptr<VarDecl>;
-auto parse_fn_decl(tokenizer& tk, Scope& scope) -> unique_ptr<Prototype>;
-auto parse_enum_decl(tokenizer& tk, Scope& scope) -> unique_ptr<EnumDecl> {
+auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& context,
+                vector<unique_ptr<Node>>&& attrs) -> unique_ptr<Declaration>;
+auto parse_var_decl(tokenizer& tk, Scope& scope,
+                    vector<unique_ptr<Node>>&& attrs) -> unique_ptr<VarDecl>;
+auto parse_fn_decl(tokenizer& tk, Scope& scope,
+                   vector<unique_ptr<Node>>&& attrs) -> unique_ptr<Prototype>;
+auto parse_enum_decl(tokenizer& tk, Scope& scope,
+                     vector<unique_ptr<Node>>&& attrs) -> unique_ptr<EnumDecl> {
 	throw 0;
 }
-auto parse_struct_decl(tokenizer& tk, Scope& scope) -> unique_ptr<StructProto> {
+auto parse_struct_decl(tokenizer& tk, Scope& scope,
+                       vector<unique_ptr<Node>>&& attrs)
+    -> unique_ptr<StructProto> {
 	throw 0;
 }
-auto parse_trait_decl(tokenizer& tk, Scope& scope) -> unique_ptr<TraitDecl> {
+auto parse_trait_decl(tokenizer& tk, Scope& scope,
+                      vector<unique_ptr<Node>>&& attrs)
+    -> unique_ptr<TraitDecl> {
 	throw 0;
 }
 
-auto parse_module_def(tokenizer& tk) -> unique_ptr<Module>;
+auto parse_module_def(tokenizer& tk, vector<unique_ptr<Node>>&& attrs)
+    -> unique_ptr<Module>;
 
 /* ns-decl-seq ::=
  * 	  { [ 'export' ] declaration }
@@ -82,8 +133,10 @@ auto parse_ns_decl_seq(tokenizer& tk, Scope& scope, const Declaration& context)
 	vector<unique_ptr<Declaration>> decls;
 
 	while (tk and not tk.check(Token::punct_rbrace) and not tk.eof()) {
+		auto attrs = parse_attr_seq(tk, scope);
 		bool is_export = tk.gettok_if(Token::kw_export).has_value();
-		auto& decl = decls.emplace_back(parse_decl(tk, scope, context));
+		auto& decl = decls.emplace_back(
+		    parse_decl(tk, scope, context, std::move(attrs)));
 		decl->_is_export = is_export;
 	}
 	return decls;
@@ -93,9 +146,12 @@ auto parse_ns_decl_seq(tokenizer& tk, Scope& scope, const Declaration& context)
  *		  'namespace' qualified-name '{' ns-decl-seq '}'
  */
 auto parse_namespace_block(tokenizer& tk, Scope& parent,
-                           const Declaration& outer) -> unique_ptr<Namespace> {
+                           const Declaration& outer,
+                           vector<unique_ptr<Node>>&& attrs)
+    -> unique_ptr<Namespace> {
 	const auto& context = outer._name._discrim;
 	auto decl = std::make_unique<Namespace>(tk.expect(Token::kw_namespace));
+	decl->_attributes = std::move(attrs);
 	auto name = parse_qualified_name(tk, parent, decl->_name);
 	decl->language = outer.language;
 	if (name.type != Token::identifier) {
@@ -134,9 +190,11 @@ auto parse_namespace_block(tokenizer& tk, Scope& parent,
  */
 auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module> {
 	unique_ptr<Module> root;
+	auto attrs = parse_attr_seq(tk, scope);
 	if (tk.peek().type == Token::kw_export
 	    or tk.peek().type == Token::kw_module) {
-		root = parse_module_def(tk);
+		root = parse_module_def(tk, std::move(attrs));
+
 		root->language = "Vellum";
 	} else {
 		throw unexpected(tk.gettok(), "module");
@@ -144,35 +202,59 @@ auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module> {
 
 	auto is_export = bool{};
 	while (tk and not tk.eof()) {
+		attrs = parse_attr_seq(tk, scope);
 		is_export = tk.gettok_if(Token::kw_export).has_value();
 		if (tk.gettok_if(Token::kw_import)) {
 			do {
 				auto name = tk.expect(Token::identifier);
-				root->_imports.push_back({name.str, is_export});
-			} while (tk.gettok_if(Token::punct_comma));
+				root->_imports.push_back({name.str, is_export, std::move(attrs)});
+			} while (false and tk.gettok_if(Token::punct_comma));
 			tk.expect(Token::punct_semi);
 		} else {
 			break;
 		}
 	}
 	root->pretty_print(std::cout);
-	while (tk and not tk.eof()) {
-		auto& last
-		    = root->_declarations.emplace_back(parse_decl(tk, scope, *root));
-		last->_is_export = is_export;
-		last->pretty_print(std::cout) << '\n';
+	try {
+		while (tk and not tk.eof()) {
+			auto& last = root->_declarations.emplace_back(
+			    parse_decl(tk, scope, *root, std::move(attrs)));
+			last->_is_export = is_export;
+			last->pretty_print(std::cout) << '\n';
 
-		// this has to be done last so that it doesn't interfere with the previous
-		// loop already setting it and then breaking
-		is_export = tk.gettok_if(Token::kw_export).has_value();
+			// this has to be done last so that it doesn't interfere with the
+			// previous loop already setting it and then breaking
+			attrs = parse_attr_seq(tk, scope);
+			is_export = tk.gettok_if(Token::kw_export).has_value();
+		}
+	} catch (const unexpected& e) {
+		std::cout << "Bailing:\n";
+		std::cout << "Current scope: \n";
+		scope.pretty_print(std::cout);
+		std::cout << "AST:\n";
+		root->pretty_print(std::cout) << std::flush;
+		throw;
+	} catch (int e) {
+		if (e) {
+			std::cout << "Bailing:\n";
+		} else {
+			std::cout << "Todo!:\n";
+		}
+		std::cout << "Current scope: \n";
+		scope.pretty_print(std::cout);
+		std::cout << "AST:\n";
+		root->pretty_print(std::cout) << std::flush;
+		throw;
 	}
+
 	return root;
 }
 
 /* module-definition ::=
  *		  [ 'export' ] 'module' module-name ';'
  */
-auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
+auto parse_module_def(tokenizer& tk, vector<unique_ptr<Node>>&& attrs)
+    -> unique_ptr<Module> {
 	auto root = unique_ptr<Module>();
 	const auto tok = tk.gettok();
 	switch (tok.type) {
@@ -190,6 +272,7 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
 		throw unexpected(tok, "module");
 	}
 	tk.expect(Token::punct_semi);
+	root->_attributes = std::move(attrs);
 	return root;
 }
 
@@ -197,7 +280,8 @@ auto parse_module_def(tokenizer& tk) -> unique_ptr<Module> {
  *		  'extern' [ string-literal ] fn-declaration
  *		| 'extern' [ string-literal ] '{' ns-decl-seq '}'
  */
-auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
+auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer,
+                       vector<unique_ptr<Node>>&& attrs)
     -> unique_ptr<Declaration> {
 	const auto& context = outer._name._discrim;
 	auto extern_tok = tk.expect(Token::kw_extern);
@@ -207,11 +291,12 @@ auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	          .value_or(Token{Token::literal_string, outer.language, {}})
 	          .str;
 	if (tk.check({Token::kw_fn, Token::kw_proc})) {
-		decl = parse_fn_decl(tk, scope);
+		decl = parse_fn_decl(tk, scope, std::move(attrs));
 		decl->language = language;
 	} else if (tk.gettok_if(Token::punct_lbrace)) {
 		auto alias = make_unique_for_modify<Namespace>(
 		    decl, std::move(extern_tok), Name("", {context.scope}));
+		decl->_attributes = std::move(attrs);
 		alias->language = language;
 		alias->_declarations = parse_ns_decl_seq(tk, scope, *alias);
 		tk.expect(Token::punct_rbrace);
@@ -222,17 +307,18 @@ auto parse_extern_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 /*
  *
  */
-auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
-    -> unique_ptr<Declaration> {
+auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer,
+                vector<unique_ptr<Node>>&& attrs) -> unique_ptr<Declaration> {
 	const auto& context = outer._name._discrim;
 	unique_ptr<Declaration> decl;
 	switch (tk.peek().type) {
 	case Token::kw_let: {
-		decl = parse_var_decl(tk, scope);
+		decl = parse_var_decl(tk, scope, std::move(attrs));
 	} break;
 	case Token::kw_alias: {
 		auto alias = make_unique_for_modify<AliasDecl>(decl, tk.gettok(),
 		                                               Name("", {context.scope}));
+		alias->_attributes = std::move(attrs);
 		// parse alias declaration
 		alias->_name._basename = tk.expect(Token::identifier).str;
 		tk.expect(Token::punct_equal);
@@ -241,25 +327,25 @@ auto parse_decl(tokenizer& tk, Scope& scope, const Declaration& outer)
 	} break;
 	case Token::kw_fn:
 	case Token::kw_proc: {
-		decl = parse_fn_decl(tk, scope);
+		decl = parse_fn_decl(tk, scope, std::move(attrs));
 		if (decl->language.empty()) {
 			decl->language = outer.language;
 		}
 	} break;
 	case Token::kw_enum: {
-		decl = parse_enum_decl(tk, scope);
+		decl = parse_enum_decl(tk, scope, std::move(attrs));
 	} break;
 	case Token::kw_struct: {
-		decl = parse_struct_decl(tk, scope);
+		decl = parse_struct_decl(tk, scope, std::move(attrs));
 	} break;
 	case Token::kw_trait: {
-		decl = parse_trait_decl(tk, scope);
+		decl = parse_trait_decl(tk, scope, std::move(attrs));
 	} break;
 	case Token::kw_extern: {
-		decl = parse_extern_decl(tk, scope, outer);
+		decl = parse_extern_decl(tk, scope, outer, std::move(attrs));
 	} break;
 	case Token::kw_namespace: {
-		decl = parse_namespace_block(tk, scope, outer);
+		decl = parse_namespace_block(tk, scope, outer, std::move(attrs));
 	} break;
 	case Token::kw_import: {
 		throw unexpected(tk.peek(), "declaration");
@@ -289,8 +375,10 @@ auto parse_initializer(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
  *		  'let' [ 'const' ] var-definition var-initializer ';'
  *		| 'let' 'mut' var-definition [ var-initializer ] ';'
  */
-auto parse_var_decl(tokenizer& tk, Scope& scope) -> unique_ptr<VarDecl> {
+auto parse_var_decl(tokenizer& tk, Scope& scope,
+                    vector<unique_ptr<Node>>&& attrs) -> unique_ptr<VarDecl> {
 	auto decl = std::make_unique<VarDecl>(tk.expect(Token::kw_let));
+	decl->_attributes = std::move(attrs);
 
 	if (tk.gettok_if(Token::kw_mut)) {
 		decl->_is_mut = true;
@@ -320,6 +408,7 @@ auto parse_var_decl(tokenizer& tk, Scope& scope) -> unique_ptr<VarDecl> {
  */
 auto parse_arg_decl(tokenizer& tk, Scope& scope) -> unique_ptr<ArgDecl> {
 	// auto decl = std::make_unique<ArgDecl>();
+	auto attrs = parse_attr_seq(tk, scope);
 	bool is_reference{};
 	bool is_mut{};
 	bool is_const{};
@@ -346,8 +435,9 @@ auto parse_arg_decl(tokenizer& tk, Scope& scope) -> unique_ptr<ArgDecl> {
 	auto decl = std::make_unique<ArgDecl>(
 	    tk.cur(), Name{tk.cur().str, Discriminators{}}, is_mut, is_const,
 	    is_reference, is_implicit, false, false);
+	decl->_attributes = std::move(attrs);
 	if (tk.gettok_if(Token::punct_colon)) {
-		decl->_type = parse_expr(tk, scope);
+		decl->_type = parse_expr(tk, scope, {Token::punct_comma});
 	}
 	if (tk.check(Token::punct_equal)) {
 		decl->_initializer = parse_initializer(tk, scope);
@@ -412,8 +502,10 @@ auto parse_signature(tokenizer& tk, Scope& scope) -> unique_ptr<Signature> {
 	return decl;
 }
 
-auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block>;
-auto parse_substrate_block(tokenizer& tk, Scope& scope)
+auto parse_block(tokenizer& tk, Scope& scope, vector<unique_ptr<Node>>&& attrs)
+    -> unique_ptr<Block>;
+auto parse_substrate_block(tokenizer& tk, Scope& scope,
+                           vector<unique_ptr<Node>>&& attrs)
     -> unique_ptr<SubstrateNode>;
 
 /* fn-declaration ::=
@@ -431,19 +523,35 @@ auto parse_substrate_block(tokenizer& tk, Scope& scope)
  *		| '=' expression ';'
  *		| '=' 'delete' [reason-expr] ';'
  */
-auto parse_fn_decl(tokenizer& tk, Scope& scope) -> unique_ptr<Prototype> {
+auto parse_fn_decl(tokenizer& tk, Scope& scope,
+                   vector<unique_ptr<Node>>&& attrs) -> unique_ptr<Prototype> {
 	auto decl = std::make_unique<FunctionDef>(
 	    tk.expect({Token::kw_fn, Token::kw_proc}));
-	auto local_scope = scope;
-	local_scope.name._basename = "__fn_local";
+	decl->_attributes = std::move(attrs);
 	if (tk.cur().type == Token::kw_fn) {
 		decl->_is_proc = false;
 	} else if (tk.cur().type == Token::kw_proc) {
 		decl->_is_proc = true;
 	}
-	parse_qualified_name(tk, local_scope, decl->_name);
+	parse_qualified_name(tk, scope, decl->_name);
 	// reparent name to scope
 	{}
+	if (auto old_decl = scope.find_name(decl->_name)) {
+		if (auto p_old_func = std::get_if<FunctionDef*>(&old_decl->second.decl);
+		    p_old_func and *p_old_func) {
+			if ((*p_old_func)->_body) {
+				throw 1;
+			}
+		} else if (auto p_old_func
+		           = std::get_if<OverloadSet>(&old_decl->second.decl)) {
+			;
+		} else {
+			throw 0;
+		}
+	}
+
+	auto local_scope = scope;
+	local_scope.name._basename = "__fn_local";
 	auto t_name = local_scope.add_name(decl.get());
 	decl->_signature = parse_signature(tk, local_scope);
 
@@ -453,6 +561,8 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope) -> unique_ptr<Prototype> {
 	} else if (not a) {
 		a = decl->_signature->_args.size();
 		local_scope.refine_name(t_name, decl.get());
+	} else {
+		assert(*a == decl->_signature->_args.size());
 	}
 
 	scope.add_name(decl.get());
@@ -474,13 +584,12 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope) -> unique_ptr<Prototype> {
 			} else {
 				tk.ignore();
 				decl->_body = parse_expr(tk, local_scope);
+				tk.expect(Token::punct_semi);
 			}
 		} break;
 		default:
 			throw unexpected(tk.gettok(), "function body or ';'");
 		}
-
-		throw 0;
 	}
 	return decl;
 }
