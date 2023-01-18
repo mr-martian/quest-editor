@@ -36,6 +36,7 @@ fn func5(arg : i31) -> u32;
 }
 
 // Structured syntax
+#[export(true)]
 export fn format_verse_s(count)
 	= verse.format(count, count - 1);
 

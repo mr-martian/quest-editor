@@ -76,6 +76,7 @@ identifier	\p{Letter}[\p{Letter}\d_]*
 operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 
 %x COMMENT
+%s ATTRIBUTE
 
 %%
 
@@ -97,6 +98,11 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 <<EOF>>	{ lexer_error("Block comment not ended before end of file"); co_return; }
 }
 "//"[^\n]* { }
+
+<ATTRIBUTE>{
+"]"            { co_yield token(Token::punct_rbrck); start(INITIAL); }
+{identifier}	{ co_yield token(Token::identifier); }
+}
 
 {literal_int}   	{ co_yield token(Token::literal_int, str()); }
 {literal_float} 	{ co_yield token(Token::literal_float, str()); }
@@ -201,7 +207,7 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "::"	{ co_yield token(Token::punct_scope); }
 "!"	{ co_yield token(Token::punct_bang); }
 "$"	{ co_yield token(Token::punct_dollar); }
-"#["	{ co_yield token(Token::punct_attr); }
+"#["	{ co_yield token(Token::punct_attr); start(ATTRIBUTE); }
 "(:"	{ co_yield token(Token::punct_substr_b); }
 ":)"	{ co_yield token(Token::punct_substr_e); }
 

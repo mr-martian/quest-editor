@@ -28,6 +28,7 @@ auto parse_attr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
 			}
 		}
 	}
+	tk.expect(Token::punct_rbrck);
 
 	return ret;
 }
