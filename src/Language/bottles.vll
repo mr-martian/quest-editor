@@ -4,10 +4,9 @@ import std;
 export import foo;
 
 // Hello world is simple:
-/*
-proc main(argv, mut stdio)
+proc main_(argv, mut stdio)
 	= stdio.out.print("Hello, world!");
-*/
+
 // Some example function declarations:
 
 fn func1();
@@ -30,6 +29,7 @@ let `strop` : i32 = 0;
 // function declaration
 export fn format_verse_s(count);
 
+#[attr, attr2]
 namespace ns {
 // redeclaration
 fn func5(arg : i31) -> u32;
@@ -40,13 +40,46 @@ fn func5(arg : i31) -> u32;
 export fn format_verse_s(count)
 	= verse.format(count, count - 1);
 
+
+
+proc main(argv, mut stdio) {
+	sing_s(stdio.out);
+	sing_c(stdio.out);
+}
+
+fn demo_loop() {
+	loop : demo { }
+}
+
+fn fun(x) = sqrt(abs(x)) + 5 * x.pow(3);
+
 proc sing_s(mut out) {
 	for count = 99 -> 1 {
 		out.print(format_verse_s(count));
-	}
+	};;
 	out.print("No more bottles of beer on the wall, no more bottles of beer.\n");
 	out.print("Go to the store and buy some more, 99 bottles of beer on the wall...\n");
 }
+
+proc tpk(&mut `in`, &mut out) {
+	let mut a : [11]f64;
+	for &mut v in a {
+		`in`.parse(&v) ?? die("Invalid input (expected number)\n")
+	} else None;
+	for i in rev(enumerate(a)) {
+		let y = fun(v);
+		if y > 400 {
+			out.print("{} TOO LARGE\n".format(i))
+		} else {
+			out.print("{} {}\n".format(i, y))
+		}
+	} else None
+}
+
+proc tpk_c(&mut `in`, &mut out) (:
+	(let mut a : [11]f64)
+	0 11 std::seq ( v -> ){  }
+:)
 
 // Substrate syntax
 fn format_verse_c(count) (:
@@ -56,34 +89,5 @@ fn format_verse_c(count) (:
 proc sing_c(mut out) (:
 	99 1 std::seq {out swap format_verse_c print} std::map
 	out "No more bottles of beer on the wall, no more bottles of beer.\nGo to the store and buy some more, 99 bottles of beer on the wall...\n" print
-:)
-
-
-
-proc main(argv, mut stdio) {
-	sing_s(stdio.out);
-	sing_c(stdio.out);
-}
-
-fn fun(x) = sqrt(abs(x)) + 5 * x.pow(3);
-
-proc tpk(&mut in_, &mut out) {
-	let mut a : [11]f64;
-	for &mut v in_ a {
-		in_.parse(&v) ?? die("Invalid input (expected number)\n")
-	}
-	for i,v in_ rev(enumerate(a)) {
-		let y = fun(v);
-		if y > 400 {
-			out.print("{} TOO LARGE\n".format(i))
-		} else {
-			out.print("{} {}\n".format(i, y))
-		}
-	}
-}
-
-proc tpk_c(&mut in_, &mut out) (:
-	(let mut a : [11]f64)
-	0 11 std::seq ( v -> ){  }
 :)
 //*/

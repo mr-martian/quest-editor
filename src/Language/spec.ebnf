@@ -196,26 +196,27 @@ for-loop-header ::=
       for i = 10 ; -1        { print(i) }
       // count -10 to 8 by 2s
       for i = -10 -> 10 ; +2 { print(i) }
-    *)
-    | loop-var-init ['->' expression]
-      [';' ('+' | '-' | ) integer-literal]
-    (* counting from 0:
+	  
+	  counting from 0:
       // count 0 to 9
       for i -> 10 { print(i) }
+	  
+	  init and bound default to 0?
+	  step defaults to +1 or -1, to reach bound?
     *)
-    | ['mut'] var-definition
-      [';' ('+' | '-' | ) integer-literal]
+    | loop-var-init ['->' expression]
+      [';' {'+' | '-'} integer-literal]
     (* generalized for loop:
-      for i = 10      while i > 1      ; i / 2    { print(i) }
-      for i = begin() while i != end() ; i.next() { print(i) }
+      for i = 10      while i > 1      ; = i / 2    { print(i) }
+      for i = begin() while i != end() ; = i.next() { print(i) }
     *)
     | loop-var-init loop-constraint
-      [';' expression]
+      [';' '=' expression | ';' {'+' | '-'} integer-literal]
 
 loop-constraint ::= 'while'
                   (* equivalent to `while not` *)
                   | 'until'
-loop-var-init ::= ['mut'] var-definition equal-initializer
+loop-var-init ::= ['mut'] var-definition [equal-initializer]
                 | '_'
 label ::= ':' identifier
         | ':' ('for' | 'while' | 'do' | 'loop')

@@ -41,7 +41,7 @@ add_executable(ast_generator ast_generator.cpp)
 
 add_executable(interpreter
 	ast.hpp token.hpp
-	interpreter.cpp parser.cpp tokenizer.cpp ast.cpp expressions.cpp
+	interpreter.cpp parser.cpp scope.cpp tokenizer.cpp ast.cpp expressions.cpp
 	lex.yy.cpp lex.yy.h)
 
 add_compile_definitions(

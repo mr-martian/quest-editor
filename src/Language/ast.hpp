@@ -50,7 +50,10 @@ class tokenizer {
 	    std::initializer_list<Token::Type> ts);
 
 	Token expect(Token::Type t);
+	Token expect(Token::Type t, std::string expected_label);
 	Token expect(std::initializer_list<Token::Type> ts);
+	Token expect(std::initializer_list<Token::Type> ts,
+	             std::string expected_label);
 
 	[[nodiscard]] Token peek() { return next; }
 	[[nodiscard]] Token cur() { return last; }
@@ -137,13 +140,23 @@ class Node {
 	Node(Token t, vector<unique_ptr<Node>> attr)
 	    : _tok(std::move(t))
 	    , _attributes(std::move(attr)) {}
+	Node(Token&& t, unique_ptr<Node> type)
+	    : _tok(std::move(t))
+	    , _type(std::move(type)) {}
+	Node(Token&& t, unique_ptr<Node> type, vector<unique_ptr<Node>> attr)
+	    : _tok(std::move(t))
+	    , _type(std::move(type))
+	    , _attributes(std::move(attr)) {}
 
 	virtual unique_ptr<SubstrateNode> substrate() const;
 	virtual std::ostream& pretty_print(std::ostream& os) const = 0;
 
+	std::ostream& print_attrs(std::ostream& os) const;
+
 	virtual ~Node() = default;
 
 	Token _tok{};
+	unique_ptr<Node> _type;
 	vector<unique_ptr<Node>> _attributes;
 
 	inline static const auto indent_idx = std::ios_base::xalloc();
@@ -152,33 +165,30 @@ class Node {
 	Node(nullptr_t) { throw nullptr; }
 };
 
-class Expr : virtual public Node {
- public:
-	using Node::Node;
-	Expr(Token&& t, unique_ptr<Expr> type)
-	    : Node(std::move(t))
-	    , _type(std::move(type)) {}
-	unique_ptr<Expr> _type;
+// pretty_print helpers
+std::ostream& indent(std::ostream& os);
+std::ostream& nest(std::ostream& os);
+std::ostream& unnest(std::ostream& os);
 
- protected:
-	Expr(nullptr_t, unique_ptr<Expr> type)
-	    : Node(nullptr)
-	    , _type(std::move(type)) {}
+class NullExpr : virtual public Node {
+	using Node::Node;
+
+	auto pretty_print(std::ostream& os) const -> std::ostream& override;
 };
 
 /*
  * Type Expressions
  */
 
-class BuiltinTypeID : public Expr {
+class BuiltinTypeID : virtual public Node {
  public:
 	explicit BuiltinTypeID(Token&& t)
 	    : Node(std::move(t))
-	    , Expr(nullptr)
+
 	    , _name(_tok.str) {}
 	BuiltinTypeID(Token&& t, string name)
 	    : Node(std::move(t))
-	    , Expr(nullptr)
+
 	    , _name(name) {}
 
 	std::ostream& pretty_print(std::ostream& os) const override {
@@ -189,11 +199,10 @@ class BuiltinTypeID : public Expr {
 
  protected:
 	BuiltinTypeID()
-	    : Node(nullptr)
-	    , Expr(nullptr) {}
+	    : Node(nullptr) {}
 	explicit BuiltinTypeID(string name)
 	    : Node(nullptr)
-	    , Expr(nullptr)
+
 	    , _name(name) {}
 };
 
@@ -261,7 +270,7 @@ class FloatTypeID : public BuiltinTypeID {
 
 class OwnerTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<Expr> _owned_type;
+	unique_ptr<Node> _owned_type;
 	std::ostream& pretty_print(std::ostream& os) const override {
 		os << "(owner ";
 		if (_owned_type) {
@@ -273,7 +282,7 @@ class OwnerTypeID : public BuiltinTypeID {
 };
 class SharedTypeID : public BuiltinTypeID {
  public:
-	unique_ptr<Expr> _owned_type;
+	unique_ptr<Node> _owned_type;
 	std::ostream& pretty_print(std::ostream& os) const override {
 		os << "(shared ";
 		if (_owned_type) {
@@ -283,24 +292,24 @@ class SharedTypeID : public BuiltinTypeID {
 		}
 	}
 };
-class ArrayTypeID : public BuiltinTypeID {
+class ArrayPrefixExpr : public BuiltinTypeID {
  public:
-	unique_ptr<Expr> _element_type;
-	vector<optional<Integer>> _bounds;
+	unique_ptr<Node> _rhs;
+	vector<optional<unique_ptr<Node>>> _args;
 	std::ostream& pretty_print(std::ostream& os) const override;
 	// Should be the '[' token that starts the array spec
-	explicit ArrayTypeID(Token&& t)
+	explicit ArrayPrefixExpr(Token&& t)
 	    : Node(std::move(t)) {}
 
  protected:
-	ArrayTypeID()
+	ArrayPrefixExpr()
 	    : Node(nullptr)
 	    , BuiltinTypeID() {}
 };
 
 class TupleTypeID : public BuiltinTypeID {
  public:
-	vector<unique_ptr<Expr>> _member_types;
+	vector<unique_ptr<Node>> _member_types;
 
 	// Node interface
  public:
@@ -320,7 +329,7 @@ class TupleTypeID : public BuiltinTypeID {
 };
 class UnionTypeID : public BuiltinTypeID {
  public:
-	set<unique_ptr<Expr>> _member_types;
+	set<unique_ptr<Node>> _member_types;
 
 	// Node interface
  public:
@@ -356,8 +365,8 @@ struct FailTypeID : public BuiltinTypeID {
 	    , BuiltinTypeID(_tok.str) {}
 };
 
-struct NoneTypeID : public TupleTypeID {
-	explicit NoneTypeID(Token&& t)
+struct NoneExpr : public TupleTypeID {
+	explicit NoneExpr(Token&& t)
 	    : Node(std::move(t))
 	    , TupleTypeID(_tok.str) {}
 	std::ostream& pretty_print(std::ostream& os) const override {
@@ -389,9 +398,9 @@ struct TypeTypeID : public BuiltinTypeID {
 	}
 };
 
-class TemplatedTypeID : public Expr {
+class TemplatedTypeID : virtual public Node {
  public:
-	vector<unique_ptr<Expr>> _args;
+	vector<unique_ptr<Node>> _args;
 };
 
 /*
@@ -403,9 +412,9 @@ class ArgDecl;
 class Signature : virtual public Node {
  public:
 	vector<unique_ptr<ArgDecl>> _args;
-	vector<unique_ptr<Expr>> _returns;
+	vector<unique_ptr<Node>> _returns;
 	struct ref_tag_t {};
-	std::variant<std::monostate, ref_tag_t, vector<unique_ptr<Expr>>> _captures;
+	std::variant<std::monostate, ref_tag_t, vector<unique_ptr<Node>>> _captures;
 	std::ostream& pretty_print(std::ostream& os) const override;
 
 	// Should be the '(' token that begins the argument list
@@ -456,18 +465,17 @@ class Name {
 };
 
 class NameExpr
-    : virtual public Expr
+    : virtual public Node
     , public Name {
  public:
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return Name::pretty_print(os);
 	}
 	explicit NameExpr(Token&& t)
-	    : Node(std::move(t))
-	    , Expr(nullptr) {}
+	    : Node(std::move(t)) {}
 	NameExpr(Token&& t, Name n)
 	    : Node(std::move(t))
-	    , Expr(nullptr)
+
 	    , Name(std::move(n)) {}
 };
 
@@ -513,7 +521,7 @@ namespace AST {
 
 class AliasDecl : public Declaration {
  public:
-	unique_ptr<Expr> _type;
+	unique_ptr<Node> _type;
 	std::ostream& pretty_print(std::ostream& os) const override {
 		os << "(alias " << _name << " = ";
 		assert(_type);
@@ -532,7 +540,7 @@ class AliasDecl : public Declaration {
 
 class VarDecl : public Declaration {
  public:
-	unique_ptr<Expr> _type;
+	unique_ptr<Node> _type;
 	bool _is_mut{};
 	bool _is_const{};
 	bool _is_reference{};
@@ -609,10 +617,10 @@ class ArgDecl : public VarDecl {
 	    , VarDecl(nullptr, std::move(n), false) {}
 };
 
-class ExprList : public Node {
+class ExprList : virtual public Node {
  public:
 	using Node::Node;
-	vector<unique_ptr<Expr>> _elems;
+	vector<unique_ptr<Node>> _elems;
 	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
@@ -665,7 +673,7 @@ class Operator : public Name {
 	    op_traits;
 };
 
-class Literal : public Expr {
+class Literal : virtual public Node {
  public:
 	string _text;
 	std::ostream& pretty_print(std::ostream& os) const override {
@@ -673,13 +681,13 @@ class Literal : public Expr {
 	}
 	Literal(Token&& t)
 	    : Node(std::move(t))
-	    , Expr(nullptr)
+
 	    , _text(_tok.str) {}
 
  protected:
 	Literal(string t)
 	    : Node(nullptr)
-	    , Expr(nullptr)
+
 	    , _text(std::move(t)) {}
 };
 
@@ -726,7 +734,7 @@ class CharLiteral : public Literal {
 class Enumerator : public Literal {
  public:
 	string _name;
-	unique_ptr<Expr> _value;
+	unique_ptr<Node> _value;
 	std::ostream& pretty_print(std::ostream& os) const override {
 		os << "(enumerator " << _name;
 		if (_value) {
@@ -743,22 +751,22 @@ class BoolKeyword : public Enumerator {};
  * Expressions / Statements
  */
 
-class PrefixExpr : public Expr {
+class PrefixExpr : virtual public Node {
  public:
 	unique_ptr<Operator> _op;
-	unique_ptr<Expr> _operand;
+	unique_ptr<Node> _operand;
 	std::ostream& pretty_print(std::ostream& os) const override;
 
 	// t should refer to the operator of this prefix expr
 	PrefixExpr(Token&& t)
 	    : Node(std::move(t))
-	    , Expr(nullptr)
+
 	    , _op(make_unique<Operator>(_tok)) {}
 
  protected:
 	PrefixExpr(nullptr_t)
 	    : Node(nullptr)
-	    , Expr(nullptr)
+
 	    , _op(make_unique<Operator>(_tok)) {}
 };
 class RefExpr : public PrefixExpr {
@@ -769,88 +777,110 @@ class RefExpr : public PrefixExpr {
 	    , PrefixExpr(nullptr) {}
 };
 
-class PostfixExpr : public Expr {
+class PostfixExpr : virtual public Node {
  public:
 	unique_ptr<Operator> _op;
-	unique_ptr<Expr> _operand;
+	unique_ptr<Node> _operand;
 	std::ostream& pretty_print(std::ostream& os) const override;
 
 	// t should refer to the operator of this postfix expr
 	PostfixExpr(Token&& t)
 	    : Node(std::move(t))
-	    , Expr(nullptr)
+
 	    , _op(make_unique<Operator>(_tok)) {}
 
  protected:
 	PostfixExpr(nullptr_t)
 	    : Node(nullptr)
-	    , Expr(nullptr)
+
 	    , _op(make_unique<Operator>(_tok)) {}
 };
 
-class BinaryExpr : public Expr {
+class BinaryExpr : virtual public Node {
  public:
 	unique_ptr<Operator> _op;
-	unique_ptr<Expr> _left, _right;
+	unique_ptr<Node> _left, _right;
 	std::ostream& pretty_print(std::ostream& os) const override;
 
 	// t should refer to the operator of this infix expr
 	BinaryExpr(Token&& t)
 	    : Node(std::move(t))
-	    , Expr(nullptr)
+
 	    , _op(make_unique<Operator>(_tok)) {}
 
  protected:
 	BinaryExpr(nullptr_t)
 	    : Node(nullptr)
-	    , Expr(nullptr)
+
 	    , _op(make_unique<Operator>(_tok)) {}
 };
 
-class CallExpr : public Expr {
+class CallExpr : virtual public Node {
  public:
-	unique_ptr<Expr> _fun;
-	vector<unique_ptr<Expr>> _args;
+	unique_ptr<Node> _fun;
+	vector<unique_ptr<Node>> _args;
 	std::ostream& pretty_print(std::ostream& os) const override;
 
 	// t should refer to the opening bracket of this call expr's argument list
 	CallExpr(Token&& t)
-	    : Node(std::move(t))
-	    , Expr(nullptr) {}
+	    : Node(std::move(t)) {}
 
  protected:
 	CallExpr(nullptr_t)
-	    : Node(nullptr)
-	    , Expr(nullptr) {}
+	    : Node(nullptr) {}
 };
 
-class RewriteExpr : public Expr {
+class RewriteExpr : virtual public Node {
  public:
-	unique_ptr<Expr> _val;
-	unique_ptr<Expr> _pattern;
+	unique_ptr<Node> _val;
+	unique_ptr<Node> _pattern;
 };
 
-class Block : public Expr {
-	vector<unique_ptr<Expr>> _expressions;
+class Block : virtual public Node {
+ public:
+	vector<unique_ptr<Node>> _expressions;
 	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the opening bracket of this block
+	Block(Token&& t)
+	    : Node(std::move(t)) {}
+
+ protected:
+	Block(nullptr_t)
+	    : Node(nullptr) {}
 };
 
-class Assignment : public Expr {};
+class Assignment : virtual public Node {};
 
-class ControlExpr : public Expr {};
+class ControlExpr : virtual public Node {
+ protected:
+	using Node::Node;
+};
 
 class IfExpression : public ControlExpr {
  public:
-	unique_ptr<Expr> _condition;
+	unique_ptr<Node> _condition;
 	bool _target{};
 	unique_ptr<Block> _true_body;
-	unique_ptr<Expr> _false_body;
+	unique_ptr<Node> _false_body;
+
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'if' keyword
+	IfExpression(Token&& t)
+	    : Node(std::move(t))
+	    , ControlExpr(nullptr) {}
+
+ protected:
+	IfExpression(nullptr_t)
+	    : Node(nullptr)
+	    , ControlExpr(nullptr) {}
 };
 
 class InvertedIfExpr : public ControlExpr {
  public:
-	unique_ptr<Expr> _body;
-	unique_ptr<Expr> _condition;
+	unique_ptr<Node> _body;
+	unique_ptr<Node> _condition;
 	bool _target{};
 };
 
@@ -858,43 +888,152 @@ class LoopExpr : public ControlExpr {
  public:
 	optional<string> _label;
 	unique_ptr<Block> _body;
+	unique_ptr<Node> _else;
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	std::ostream& write_label(std::ostream& os) const {
+		if (_label) {
+			os << "(label " << *_label << ") ";
+		}
+		return os;
+	}
+	std::ostream& write_else(std::ostream& os) const {
+		if (_else) {
+			os << '\n' << indent << "(else ";
+			_else->pretty_print(os) << ")";
+		}
+		return os;
+	}
+
+	// t should refer to the loop keyword
+	LoopExpr(Token&& t)
+	    : Node(std::move(t))
+	    , ControlExpr(nullptr) {}
+
+ protected:
+	LoopExpr(nullptr_t)
+	    : Node(nullptr)
+	    , ControlExpr(nullptr) {}
+};
+
+class LoopConstraint : public virtual Node {
+ public:
+	unique_ptr<Node> _condition;
+	bool _target{};
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'while' or 'until' keyword
+	LoopConstraint(Token&& t)
+	    : Node(std::move(t))
+	    , _target{t.type == Token::kw_while} {}
+
+ protected:
+	LoopConstraint(nullptr_t, bool target)
+	    : Node(nullptr)
+	    , _target{target} {}
 };
 
 class WhileExpr : public LoopExpr {
  public:
-	unique_ptr<Expr> _condition;
-	bool _target{};
-	unique_ptr<Expr> _else;
+	unique_ptr<LoopConstraint> _constraint;
+
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'while' keyword
+	WhileExpr(Token&& t)
+	    : Node(std::move(t))
+	    , LoopExpr(nullptr) {}
+
+ protected:
+	WhileExpr(nullptr_t)
+	    : Node(nullptr)
+	    , LoopExpr(nullptr) {}
 };
 
 class DoWhileExpr : public LoopExpr {
  public:
-	unique_ptr<Expr> _condition;
-	bool _target{};
-	unique_ptr<Expr> _else;
+	unique_ptr<LoopConstraint> _constraint;
+
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'do' keyword
+	DoWhileExpr(Token&& t)
+	    : Node(std::move(t))
+	    , LoopExpr(nullptr) {}
+
+ protected:
+	DoWhileExpr(nullptr_t)
+	    : Node(nullptr)
+	    , LoopExpr(nullptr) {}
 };
 
+// intermediate node
 class ForLoopExpr : public LoopExpr {
  public:
 	unique_ptr<VarDecl> _induction_variable;
-	bool _is_mut{};
+
+	std::ostream& pretty_print(std::ostream& os) const override = 0;
+
+ protected:
+	// t should refer to the 'for' keyword
+	ForLoopExpr(Token&& t)
+	    : Node(std::move(t))
+	    , LoopExpr(nullptr) {}
+	ForLoopExpr(nullptr_t)
+	    : Node(nullptr)
+	    , LoopExpr(nullptr) {}
 };
 
 class ForInExpr : public ForLoopExpr {
  public:
-	unique_ptr<Expr> _range_expr;
+	unique_ptr<Node> _range_expr;
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'for' keyword
+	ForInExpr(Token&& t)
+	    : Node(std::move(t))
+	    , ForLoopExpr(nullptr) {}
+
+ protected:
+	ForInExpr(nullptr_t)
+	    : Node(nullptr)
+	    , ForLoopExpr(nullptr) {}
 };
 
 class ForRangeExpr : public ForLoopExpr {
-	unique_ptr<Expr> _r_begin, _r_end;
-	unique_ptr<Expr> _update;
+ public:
+	unique_ptr<Node> _r_end;
+	unique_ptr<Node> _update;
+
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'for' keyword
+	ForRangeExpr(Token&& t)
+	    : Node(std::move(t))
+	    , ForLoopExpr(nullptr) {}
+
+ protected:
+	ForRangeExpr(nullptr_t)
+	    : Node(nullptr)
+	    , ForLoopExpr(nullptr) {}
 };
 
 class GForExpr : public ForLoopExpr {
  public:
-	unique_ptr<Expr> _condition;
-	bool _target{};
-	unique_ptr<Expr> _update;
+	unique_ptr<LoopConstraint> _constraint;
+	unique_ptr<Node> _update;
+
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'for' keyword
+	GForExpr(Token&& t)
+	    : Node(std::move(t))
+	    , ForLoopExpr(nullptr) {}
+
+ protected:
+	GForExpr(nullptr_t)
+	    : Node(nullptr)
+	    , ForLoopExpr(nullptr) {}
 };
 
 class MatchExpr : public ControlExpr {
@@ -917,9 +1056,7 @@ class ResultExpr
  * Complex Declarations
  */
 
-class Prototype
-    : public Declaration
-    , public Expr {
+class Prototype : public Declaration {
  public:
 	bool _is_proc{};
 	optional<string> _linkage;
@@ -931,7 +1068,7 @@ class Prototype
 	Prototype(Token&& t)
 	    : Node(std::move(t))
 	    , Declaration(nullptr)
-	    , Expr(nullptr)
+
 	    , _is_proc(_tok.type == Token::kw_proc ? true
 	               : _tok.type == Token::kw_fn ? false
 	                                           : throw 1) {}
@@ -940,7 +1077,7 @@ class Prototype
 	Prototype(nullptr_t)
 	    : Node(nullptr)
 	    , Declaration(nullptr)
-	    , Expr(nullptr)
+
 	    , _is_proc(_tok.type == Token::kw_proc ? true
 	               : _tok.type == Token::kw_fn ? false
 	                                           : throw 1) {}
@@ -953,9 +1090,7 @@ enum class Protection {
 	Public,
 };
 
-class StructProto
-    : public Declaration
-    , public Expr {
+class StructProto : public Declaration {
  public:
 	vector<unique_ptr<ArgDecl>> _args;
 };
@@ -986,9 +1121,7 @@ class StructDef : public StructProto {
 	vector<unique_ptr<StructMember>> _members;
 };
 
-class EnumDecl
-    : public Declaration
-    , public Expr {
+class EnumDecl : public Declaration {
  public:
 	vector<unique_ptr<Enumerator>> _enumerators;
 };
@@ -1009,20 +1142,18 @@ class FunctionDef : public Prototype {
 	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
-class Attribute : public Expr {
+class Attribute : virtual public Node {
  public:
 	Attribute(Token&& t)
-	    : Node(std::move(t))
-	    , Expr(nullptr) {}
+	    : Node(std::move(t)) {}
 
  protected:
 	Attribute(nullptr_t)
-	    : Node(nullptr)
-	    , Expr(nullptr) {}
+	    : Node(nullptr) {}
 
  public:
 	Name _attr;
-	optional<vector<unique_ptr<Expr>>> _args;
+	optional<vector<unique_ptr<Node>>> _args;
 	std::ostream& pretty_print(std::ostream& os) const override;
 };
 
@@ -1030,19 +1161,22 @@ class Attribute : public Expr {
  * Substrate
  */
 
-class SubstrateNode : virtual public Expr {
+class SubstrateNode : virtual public Node {
  public:
-	vector<unique_ptr<Expr>> _terms;
+	vector<unique_ptr<Node>> _terms;
 };
 
 struct prefix_parselet_t {
-	auto (*func)(Scope& scope, tokenizer& tk) -> unique_ptr<Expr>;
+	auto (*func)(tokenizer& tk, Scope& scope,
+	             std::initializer_list<Token::Type> end_tok_types)
+	    -> unique_ptr<Node>;
 	int bp{};
 	operator decltype(func)() const { return func; }
 };
 struct infix_parselet_t {
-	auto (*func)(Scope& scope, tokenizer& tk, unique_ptr<Expr> left)
-	    -> unique_ptr<Expr>;
+	auto (*func)(tokenizer& tk, Scope& scope,
+	             std::initializer_list<Token::Type> end_tok_types,
+	             unique_ptr<Node> left) -> unique_ptr<Node>;
 	int bp_l{};
 	int bp_r{bp_l};
 	operator decltype(func)() const { return func; }
@@ -1233,10 +1367,20 @@ class Module
 auto parse_module(tokenizer& tk, Scope& scope) -> unique_ptr<Module>;
 auto parse_expr(tokenizer& tk, Scope& scope,
                 std::initializer_list<Token::Type> end_tok_types = {},
-                int bp = 0) -> unique_ptr<Expr>;
+                int bp = 0) -> unique_ptr<Node>;
 auto parse_qualified_name(tokenizer& tk, const Scope& scope, Name& name)
     -> Token;
-auto parse_attr_seq(tokenizer& tk, Scope& scope) -> vector<unique_ptr<Node>>;
+auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block>;
+auto parse_attr_seq(tokenizer& tk, Scope& scope,
+                    std::initializer_list<Token::Type> end_tok_types = {})
+    -> vector<unique_ptr<Node>>;
+auto parse_var_decl(tokenizer& tk, Scope& scope,
+                    vector<unique_ptr<Node>>&& attrs) -> unique_ptr<VarDecl>;
+auto parse_var_def(tokenizer& tk, Scope& scope,
+                   vector<unique_ptr<Node>>&& attrs) -> unique_ptr<VarDecl>;
+auto parse_fn_decl(tokenizer& tk, Scope& scope,
+                   vector<unique_ptr<Node>>&& attrs) -> unique_ptr<Prototype>;
+auto parse_initializer(tokenizer& tk, Scope& scope) -> unique_ptr<Node>;
 
 // avoid a dynamic_cast without opening up possibility of memory leak
 template <typename Class, typename Base, typename... Args>

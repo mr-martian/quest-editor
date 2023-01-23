@@ -23,7 +23,7 @@ Operators by precedence:
     16: a if b else c		inverted-if-expression	    	R
     17: match a {}, 		match-expression		*
     18: if a {},
-	if a {} else b {},	if-expression			R
+	if a {} else {},	if-expression			R
     19: for/while/do/loop	loop-expression             	L
     20: return a, yield a,
 	break a, continue	exit-expression             	L

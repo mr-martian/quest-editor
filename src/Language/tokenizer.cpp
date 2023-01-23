@@ -367,6 +367,13 @@ Token tokenizer::expect(const Token::Type t) {
 		throw unexpected(last, tok_name(Token{t, "", {}}));
 	}
 }
+Token tokenizer::expect(const Token::Type t, std::string expected_label) {
+	if (auto n = gettok_if(t)) {
+		return *std::move(n);
+	} else {
+		throw unexpected(last, expected_label);
+	}
+}
 
 Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
 	if (std::any_of(ts.begin(), ts.end(),
@@ -380,6 +387,16 @@ Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
 		               });
 		auto expected = kblib::join(expected_names, ", or ");
 		throw unexpected(last, expected);
+	}
+}
+
+Token tokenizer::expect(std::initializer_list<Token::Type> ts,
+                        std::string expected_label) {
+	if (std::any_of(ts.begin(), ts.end(),
+	                [&](const auto& t) { return t == next.type; })) {
+		return gettok();
+	} else {
+		throw unexpected(last, expected_label);
 	}
 }
 

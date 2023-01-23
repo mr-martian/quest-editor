@@ -52,7 +52,8 @@ Operator::Operator(Token t)
 	std::tie(_assoc, _eval_order) = op_traits[t.type];
 }
 
-auto parse_literal(Scope&, tokenizer& tk) -> unique_ptr<Expr> {
+auto parse_literal(tokenizer& tk, Scope&, std::initializer_list<Token::Type>)
+    -> unique_ptr<Node> {
 	switch (tk.gettok().type) {
 	case Token::literal_char:
 		return std::make_unique<CharLiteral>(tk.cur());
@@ -67,13 +68,17 @@ auto parse_literal(Scope&, tokenizer& tk) -> unique_ptr<Expr> {
 	}
 }
 
-auto parse_name_expr(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
+auto parse_name_expr(tokenizer& tk, Scope& scope,
+                     std::initializer_list<Token::Type> end_tok_types)
+    -> unique_ptr<Node> {
 	auto name = Name();
 	return make_unique<NameExpr>(parse_qualified_name(tk, scope, name),
 	                             std::move(name));
 }
 
-auto parse_typeid(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
+auto parse_typeid(tokenizer& tk, Scope& scope,
+                  std::initializer_list<Token::Type> end_tok_types)
+    -> unique_ptr<Node> {
 	switch (tk.gettok().type) {
 	case Token::kw_Bool:
 		return std::make_unique<BoolTypeID>(tk.cur());
@@ -86,7 +91,7 @@ auto parse_typeid(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
 	case Token::kw_Float64:
 		return std::make_unique<FloatTypeID>(tk.cur(), FloatTypeID::Float64);
 	case Token::kw_None:
-		return std::make_unique<NoneTypeID>(tk.cur());
+		return std::make_unique<NoneExpr>(tk.cur());
 	case Token::kw_Noreturn:
 		return std::make_unique<NoreturnTypeID>(tk.cur());
 	case Token::kw_This:
@@ -103,30 +108,36 @@ auto parse_typeid(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
 }
 
 template <int bp>
-auto parse_prefix_expr(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
+auto parse_prefix_expr(tokenizer& tk, Scope& scope,
+                       std::initializer_list<Token::Type> end_tok_types)
+    -> unique_ptr<Node> {
 	auto ret = std::make_unique<PrefixExpr>(tk.gettok());
 	ret->_operand = parse_expr(tk, scope, {}, bp);
 	return ret;
 }
 
 template <int bp_r>
-auto parse_postfix_expr(Scope& scope, tokenizer& tk, unique_ptr<Expr> left)
-    -> unique_ptr<Expr> {
+auto parse_postfix_expr(tokenizer& tk, Scope& scope,
+                        std::initializer_list<Token::Type> end_tok_types,
+                        unique_ptr<Node> left) -> unique_ptr<Node> {
 	auto ret = make_unique<PostfixExpr>(tk.gettok());
 	ret->_operand = std::move(left);
 	return ret;
 }
 
 template <int bp_r>
-auto parse_binary_expr(Scope& scope, tokenizer& tk, unique_ptr<Expr> left)
-    -> unique_ptr<Expr> {
+auto parse_binary_expr(tokenizer& tk, Scope& scope,
+                       std::initializer_list<Token::Type> end_tok_types,
+                       unique_ptr<Node> left) -> unique_ptr<Node> {
 	auto ret = make_unique<BinaryExpr>(tk.gettok());
 	ret->_left = std::move(left);
 	ret->_right = parse_expr(tk, scope, {}, bp_r);
 	return ret;
 }
 
-auto parse_ref_expr(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
+auto parse_ref_expr(tokenizer& tk, Scope& scope,
+                    std::initializer_list<Token::Type> end_tok_types)
+    -> unique_ptr<Node> {
 	auto ret = std::make_unique<RefExpr>(tk.gettok());
 	if (tk.gettok_if(Token::kw_mut)) {
 		ret->_is_mut = true;
@@ -135,35 +146,233 @@ auto parse_ref_expr(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
 	return ret;
 }
 
-template <Token::Type>
-auto parse_if_expr1(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
+auto parse_label_use(tokenizer& tk, Scope& scope) -> optional<Token> {
+	if (tk.gettok_if(Token::punct_colon)) {
+		return tk.expect(
+		    {
+		        Token::identifier,
+		        Token::kw_for,
+		        Token::kw_while,
+		        Token::kw_do,
+		        Token::kw_loop,
+		        Token::kw_fn,
+		        Token::kw_proc,
+		        Token::kw_match,
+		    },
+		    "label");
+	} else {
+		return {};
+	}
+}
+auto parse_label_decl(tokenizer& tk, Scope& scope) -> optional<string> {
+	if (tk.gettok_if(Token::punct_colon)) {
+		return tk.expect(Token::identifier).str;
+	} else {
+		return {};
+	}
+}
+
+auto parse_loop_constraint(tokenizer& tk, Scope& scope)
+    -> unique_ptr<LoopConstraint> {
+	auto constraint = make_unique<LoopConstraint>(
+	    tk.expect({Token::kw_while, Token::kw_until}));
+	constraint->_condition = parse_expr(tk, scope);
+	return constraint;
+}
+auto parse_loop_constraint(tokenizer& tk, Scope& scope, Token&& t)
+    -> unique_ptr<LoopConstraint> {
+	assert(t.type == Token::kw_while or t.type == Token::kw_until);
+	auto constraint = make_unique<LoopConstraint>(std::move(t));
+	constraint->_condition = parse_expr(tk, scope);
+	return constraint;
+}
+auto parse_loop_else(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
+	if (not tk.gettok_if(Token::punct_semi)) {
+		tk.expect(Token::kw_else);
+		return parse_expr(tk, scope, {}, Loop_Expr);
+	} else {
+		return nullptr;
+	}
+}
+
+auto parse_for_loop(tokenizer& tk, Scope& scope) -> unique_ptr<ForLoopExpr> {
+	auto for_tk = tk.gettok();
+	auto label = parse_label_decl(tk, scope);
+	auto induction_var = unique_ptr<VarDecl>();
+	if (not tk.gettok_if(Token::kw_underscore)) {
+		induction_var = parse_var_def(tk, scope, parse_attr_seq(tk, scope));
+	}
+
+	if (tk.gettok_if(Token::kw_in)) {
+		auto expr = make_unique<ForInExpr>(std::move(for_tk));
+		expr->_label = std::move(label);
+		expr->_induction_variable = std::move(induction_var);
+
+		expr->_range_expr = parse_expr(tk, scope, {Token::punct_lbrace});
+		expr->_body = parse_block(tk, scope);
+		expr->_else = parse_loop_else(tk, scope);
+		return expr;
+	}
+
+	auto init = unique_ptr<Node>();
+	if (tk.check(Token::punct_equal)) {
+		assert(induction_var);
+		init = parse_initializer(tk, scope);
+	}
+
+	if (tk.check({Token::kw_while, Token::kw_until})) {
+		auto expr = make_unique<GForExpr>(std::move(for_tk));
+		expr->_label = std::move(label);
+		if ((expr->_induction_variable = std::move(induction_var))) {
+			expr->_induction_variable->_initializer = std::move(init);
+		}
+		expr->_constraint = parse_loop_constraint(tk, scope);
+		if (tk.gettok_if(Token::punct_semi)) {
+			expr->_update = parse_expr(tk, scope, {Token::punct_lbrace});
+		}
+		expr->_body = parse_block(tk, scope);
+		expr->_else = parse_loop_else(tk, scope);
+		return expr;
+	}
+
+	auto expr = make_unique<ForRangeExpr>(std::move(for_tk));
+	expr->_label = std::move(label);
+	expr->_induction_variable = std::move(induction_var);
+	expr->_induction_variable->_initializer = std::move(init);
+	if (tk.gettok_if(Token::punct_arrow)) {
+		expr->_r_end = parse_expr(tk, scope, {Token::punct_lbrace});
+	}
+	if (tk.gettok_if(Token::punct_semi)) {
+		expr->_update = parse_expr(tk, scope, {Token::punct_lbrace});
+	}
+
+	expr->_body = parse_block(tk, scope);
+	expr->_else = parse_loop_else(tk, scope);
+	return expr;
+}
+
+auto parse_loop_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
+	switch (tk.peek().type) {
+	case Token::kw_loop: {
+		auto expr = make_unique<LoopExpr>(tk.gettok());
+		expr->_label = parse_label_decl(tk, scope);
+		expr->_body = parse_block(tk, scope);
+		return expr;
+	} break;
+	case Token::kw_for: {
+		return parse_for_loop(tk, scope);
+	} break;
+	case Token::kw_while:
+	case Token::kw_until: {
+		auto expr = make_unique<WhileExpr>(tk.gettok());
+		expr->_label = parse_label_decl(tk, scope);
+		expr->_constraint = parse_loop_constraint(tk, scope, tk.cur());
+		expr->_body = parse_block(tk, scope);
+		expr->_else = parse_loop_else(tk, scope);
+		return expr;
+	} break;
+	case Token::kw_do: {
+		auto expr = make_unique<DoWhileExpr>(tk.gettok());
+		expr->_label = parse_label_decl(tk, scope);
+		expr->_body = parse_block(tk, scope);
+		expr->_constraint = parse_loop_constraint(tk, scope);
+		expr->_else = parse_loop_else(tk, scope);
+		return expr;
+	} break;
+	default:
+		throw 1;
+	}
+
 	throw 0;
 }
 template <Token::Type>
-auto parse_if_expr2(Scope& scope, tokenizer& tk, unique_ptr<Expr> left)
-    -> unique_ptr<Expr> {
+auto parse_if_expr1(tokenizer& tk, Scope& scope,
+                    std::initializer_list<Token::Type> end_tok_types)
+    -> unique_ptr<Node> {
 	throw 0;
 }
-auto parse_block(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> { throw 0; }
-auto parse_parenthesized_expr(Scope& scope, tokenizer& tk) -> unique_ptr<Expr> {
+template <Token::Type>
+auto parse_if_expr2(tokenizer& tk, Scope& scope,
+                    std::initializer_list<Token::Type> end_tok_types,
+                    unique_ptr<Node> left) -> unique_ptr<Node> {
+	throw 0;
+}
+auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block> {
+	auto list = std::make_unique<Block>(tk.expect(Token::punct_lbrace));
+	while (not tk.gettok_if(Token::punct_rbrace)) {
+		if (auto rb = tk.gettok_if(Token::punct_rbrace)) {
+			list->_expressions.push_back(make_unique<NoneExpr>(std::move(*rb)));
+			break;
+		}
+		auto attrs = parse_attr_seq(tk, scope);
+		if (tk.peek().type == Token::kw_let) {
+			list->_expressions.push_back(
+			    parse_var_decl(tk, scope, std::move(attrs)));
+		} else if (tk.peek().type == Token::kw_fn
+		           or tk.peek().type == Token::kw_proc) {
+			list->_expressions.push_back(
+			    parse_fn_decl(tk, scope, std::move(attrs)));
+		} else {
+			list->_expressions.push_back(
+			    parse_expr(tk, scope, {Token::punct_rbrace}));
+			list->_expressions.back()->_attributes = std::move(attrs);
+			if (tk.gettok_if(Token::punct_rbrace)) {
+				break;
+			} else {
+				tk.expect(Token::punct_semi);
+			}
+		}
+	}
+	return list;
+}
+auto parse_parenthesized_expr(tokenizer& tk, Scope& scope,
+                              std::initializer_list<Token::Type> end_tok_types)
+    -> unique_ptr<Node> {
 	throw 0;
 }
 template <Token::Type end>
-auto parse_call_expr(Scope& scope, tokenizer& tk, unique_ptr<Expr> left)
-    -> unique_ptr<Expr> {
+auto parse_call_expr(tokenizer& tk, Scope& scope,
+                     std::initializer_list<Token::Type> end_tok_types,
+                     unique_ptr<Node> left) -> unique_ptr<Node> {
 	auto ret = std::make_unique<CallExpr>(tk.gettok());
 	ret->_fun = std::move(left);
 	ret->_args.push_back(parse_expr(tk, scope, {Token::punct_comma}));
 	while (tk.gettok_if(Token::punct_comma)) {
 		ret->_args.push_back(parse_expr(tk, scope, {Token::punct_comma}));
 	}
-	tk.expect(Token::punct_rparen);
+	tk.expect(end);
+	return ret;
+}
+
+auto parse_array_expr(tokenizer& tk, Scope& scope,
+                      std::initializer_list<Token::Type> end_tok_types)
+    -> unique_ptr<Node> {
+	auto ret = std::make_unique<ArrayPrefixExpr>(tk.gettok());
+
+	while (not tk.gettok_if(Token::punct_rbrck)) {
+		auto attr = parse_attr_seq(tk, scope);
+		if (auto comma = tk.gettok_if(Token::punct_comma)) {
+			if (not attr.empty()) {
+				ret->_args.push_back(
+				    make_unique<NullExpr>(std::move(*comma), std::move(attr)));
+			}
+		} else {
+			auto expr = parse_expr(tk, scope, {Token::punct_comma}, Atom_Expr);
+			expr->_attributes = std::move(attr);
+			assert(expr);
+			ret->_args.push_back(std::move(expr));
+		}
+	}
+
+	ret->_rhs = parse_expr(tk, scope, end_tok_types);
+
 	return ret;
 }
 
 template <Token::Type begin, Token::Type end>
-auto read_bracketed_expr(tokenizer& tk, Scope& scope, std::vector<Token>& expr)
-    -> void {
+auto read_bracketed_expr(tokenizer& tk, Scope& scope,
+                         std::initializer_list<Token::Type> end_tok_types,
+                         std::vector<Token>& expr) -> void {
 	tk.expect(begin);
 	while (auto& tok = expr.emplace_back(tk.peek())) {
 		if (tok.type == end) {
@@ -177,23 +386,23 @@ auto read_bracketed_expr(tokenizer& tk, Scope& scope, std::vector<Token>& expr)
 			throw 1;
 		case Token::punct_lparen:
 			read_bracketed_expr<Token::punct_lparen, Token::punct_rparen>(
-			    tk, scope, expr);
+			    tk, scope, end_tok_types, expr);
 			break;
 		case Token::punct_lbrck:
-			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(tk, scope,
-			                                                            expr);
+			read_bracketed_expr<Token::punct_lbrck, Token::punct_rbrck>(
+			    tk, scope, end_tok_types, expr);
 			break;
 		case Token::punct_attr:
-			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(tk, scope,
-			                                                           expr);
+			read_bracketed_expr<Token::punct_attr, Token::punct_rbrck>(
+			    tk, scope, end_tok_types, expr);
 			break;
 		case Token::punct_lbrace:
 			read_bracketed_expr<Token::punct_lbrace, Token::punct_rbrace>(
-			    tk, scope, expr);
+			    tk, scope, end_tok_types, expr);
 			break;
 		case Token::punct_substr_b:
 			read_bracketed_expr<Token::punct_substr_b, Token::punct_substr_e>(
-			    tk, scope, expr);
+			    tk, scope, end_tok_types, expr);
 			break;
 		default:
 			tk.ignore();
@@ -372,6 +581,28 @@ end_expr:
    }
 }//*/
 
+template <auto F>
+auto drop_stop_tokens(tokenizer& tk, Scope& scope,
+                      std::initializer_list<Token::Type>) -> unique_ptr<Node> {
+	if constexpr (requires { F(tk, scope); }) {
+		return F(tk, scope);
+	} else {
+		static_assert(requires { F(tk, scope, {}); });
+		return F(tk, scope, {});
+	}
+}
+template <auto F>
+auto drop_stop_tokens(tokenizer& tk, Scope& scope,
+                      std::initializer_list<Token::Type>, unique_ptr<Node> left)
+    -> unique_ptr<Node> {
+	if constexpr (requires { F(tk, scope, std::move(left)); }) {
+		return F(tk, scope, std::move(left));
+	} else {
+		static_assert(requires { F(tk, scope, std::move(left), {}); });
+		return F(tk, scope, std::move(left), {});
+	}
+}
+
 void Scope::default_ops() {
 	// Atoms:
 	reg1({Token::identifier, Token::punct_scope}, {&parse_name_expr, Atom_Expr});
@@ -398,14 +629,18 @@ void Scope::default_ops() {
 
 	// Bracketing operators
 	reg1(Token::punct_lparen, {&parse_parenthesized_expr, Atom_Expr});
-	reg1(Token::punct_lbrace, {&parse_block, Atom_Expr});
+	reg1(Token::punct_lbrace, {&drop_stop_tokens<parse_block>, Atom_Expr});
 
 	// Prefix operators (loose binding)
 	reg1({Token::kw_await, Token::kw_break, Token::kw_continue, Token::kw_result,
 	      Token::kw_return, Token::kw_yield},
 	     {&parse_prefix_expr<0>, Exit_expr});
 
-	reg1(Token::kw_if, {&parse_if_expr1<Token::kw_else>, If_Expr_L});
+	reg1({Token::kw_if, Token::kw_unless},
+	     {&parse_if_expr1<Token::kw_else>, If_Expr_L});
+	reg1({Token::kw_loop, Token::kw_while, Token::kw_for, Token::kw_do,
+	      Token::kw_until},
+	     {&drop_stop_tokens<parse_loop_expr>, Loop_Expr});
 
 	// postfix operators
 	reg2({Token::op_carat, Token::op_dots},
@@ -429,13 +664,17 @@ void Scope::default_ops() {
 	     {&parse_binary_expr<Comparison_Expr>, Comparison_Expr});
 	reg2({Token::op_and}, {&parse_binary_expr<And_Expr>, And_Expr});
 	reg2({Token::op_or}, {&parse_binary_expr<Or_Expr>, Or_Expr});
-	reg2({Token::op_qmqm},
-	     {&parse_binary_expr<Null_Coalescing_Expr_R>, Null_Coalescing_Expr_L});
-	reg2({Token::op_pipe}, {&parse_binary_expr<Rewrite_Expr_R>, Rewrite_Expr_L});
-	reg2({Token::op_orelse}, {&parse_binary_expr<Cond_Expr_R>, Cond_Expr_L});
-	reg2({Token::op_qm}, {&parse_if_expr2<Token::punct_colon>, Cond_Expr_L});
+	reg2({Token::op_qmqm}, {&parse_binary_expr<Null_Coalescing_Expr_R>,
+	                        Null_Coalescing_Expr_L, Null_Coalescing_Expr_R});
+	reg2({Token::op_pipe},
+	     {&parse_binary_expr<Rewrite_Expr_R>, Rewrite_Expr_L, Rewrite_Expr_R});
+	reg2({Token::op_orelse},
+	     {&parse_binary_expr<Cond_Expr_R>, Cond_Expr_L, Cond_Expr_R});
+	reg2({Token::op_qm},
+	     {&parse_if_expr2<Token::punct_colon>, Cond_Expr_L, Cond_Expr_R});
+
 	reg2(Token::kw_match, {nullptr, Match_Expr});
-	reg2(Token::kw_if, {nullptr, If_Expr_L});
+	reg2({Token::kw_if, Token::kw_unless}, {nullptr, If_Expr_L});
 
 	reg2(Token::punct_comma, {nullptr, Expr_List});
 
@@ -444,19 +683,35 @@ void Scope::default_ops() {
 	     {&parse_call_expr<Token::punct_rparen>, Postfix_Expr});
 	reg2(Token::punct_lbrck,
 	     {&parse_call_expr<Token::punct_rbrck>, Postfix_Expr});
+	reg1(Token::punct_lbrck, {&parse_array_expr, Postfix_Expr});
 
 	// end of expression:
-	reg2({Token::punct_semi, Token::punct_rbrace, Token::punct_rbrck,
-	      Token::punct_rparen, Token::punct_equal, Token::punct_colon},
+	reg1({Token::punct_semi, Token::punct_rbrace, Token::punct_rbrck,
+	      Token::punct_rparen, Token::punct_equal, Token::punct_colon,
+	      Token::punct_arrow},
 	     {nullptr, Expr_End});
+	reg2({Token::punct_semi, Token::punct_rbrace, Token::punct_rbrck,
+	      Token::punct_rparen, Token::punct_equal, Token::punct_colon,
+	      Token::punct_arrow},
+	     {nullptr, Expr_End});
+
+	// Declarations/statement expressions
+	reg1(Token::kw_let, {&drop_stop_tokens<parse_var_decl>, Atom_Expr});
 }
 
-unique_ptr<Expr> parse_expr(tokenizer& tk, Scope& scope,
+unique_ptr<Node> parse_expr(tokenizer& tk, Scope& scope,
                             std::initializer_list<Token::Type> end_tok_types,
                             int bp) {
+	if (std::find(end_tok_types.begin(), end_tok_types.end(), tk.peek().type)
+	    != end_tok_types.end()) {
+		throw 1;
+	}
 	auto prefix = scope._prefix_parselets.at(tk.peek().type);
+	if (prefix.bp < bp) {
+		throw 1;
+	}
 	assert(prefix);
-	auto expr = prefix(scope, tk);
+	auto expr = prefix(tk, scope, end_tok_types);
 
 	while (true) {
 		if (std::find(end_tok_types.begin(), end_tok_types.end(), tk.peek().type)
@@ -468,7 +723,7 @@ unique_ptr<Expr> parse_expr(tokenizer& tk, Scope& scope,
 			if (infix_i->second.bp_l < bp) {
 				break;
 			}
-			expr = (infix_i->second)(scope, tk, std::move(expr));
+			expr = (infix_i->second)(tk, scope, end_tok_types, std::move(expr));
 		} else {
 			throw 1;
 		}

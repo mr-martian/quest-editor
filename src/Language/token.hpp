@@ -18,6 +18,8 @@ struct source_location {
 	std::size_t col{};
 
 	std::size_t length{1};
+
+	auto operator<=>(const source_location&) const = default;
 };
 
 struct Token {
@@ -183,6 +185,7 @@ struct Token {
 		return type != eof and type != unknown;
 	}
 	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
+	auto operator<=>(const Token&) const = default;
 };
 
 enum class token_class {
