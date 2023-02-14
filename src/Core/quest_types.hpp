@@ -1,4 +1,3 @@
-
 /* *****************************************************************************
  * This file is part of the Quest Text Editor project.
  * Copyright (c) 2021 Daniel Swanson (@mr-martian), Dusty Miller (@d-us-vb),
@@ -7,14 +6,15 @@
  * This file contains all types that are used globally in the Quest System
  *
  * ****************************************************************************/
+#ifndef QUEST_TYPES_H
+#define QUEST_TYPES_H
 
-
-#include <vector>
 #include <thread>
 #include <variant>
+#include <vector>
 
 #include "rope.hpp"
-
+// clang-format off
 namespace Quest
 {
 
@@ -26,7 +26,7 @@ namespace Quest
      * process data, you simply specify the columns (components), then the API provides
      * iterators for your processing function (system).
           */
-    
+
 
     /* Buffers
      *
@@ -62,22 +62,22 @@ namespace Quest
      * frontend. Most users don't need to worry about frame buffers. The three wholly
      * Quest buffer types are completely decoupled from any outside system. See
      * quest_frontend_interface.hpp)
-     * 
+     *
      */
 
     /*
      * Raw Buffers: A raw buffer contains the raw data read from a file or a
      * byte-serialized form of the data structures in a semantic buffer.
-     * 
+     *
      * - RawTextBuffer: this stores plaintext read from a file. It is stored as
      *   a NonQuest::Rope.
-     
+
      * - RawBinaryBuffer: this stores a blob of binary data.
-     
+
      * - RawLargeTextBuffer: this stores the handle and data of a very large text file.
      *   The threshold between regular and large file is set optionally by the user.
-     *   Default is 16MB. 
-     
+     *   Default is 16MB.
+
      * - RawLargeBinaryBuffer: this stores a blob of *lots* of binary data.
 
      * These types are combined into Quest::RawBuffer, a std::variant to help simplify the
@@ -102,7 +102,7 @@ namespace Quest
     struct RawBinaryBuffer
     {
     };
-    
+
     struct RawLargeTextBuffer
     {
     };
@@ -111,7 +111,7 @@ namespace Quest
     {
     };
 
-    typedef std::variant< RawTextBuffer, RawBinaryBuffer, RawLargeTextBuffer > RawBuffer;  
+    typedef std::variant< RawTextBuffer, RawBinaryBuffer, RawLargeTextBuffer > RawBuffer;
 
     /* Semantic Buffers
      *
@@ -119,11 +119,11 @@ namespace Quest
      * natively supports 6 data structures that should cover 99.9% of files. Note that
      * *array of bytes* is not included in here, because that is supported at the
      * RawBuffer level.
-     
-     * 1. Arrays of lines 
+
+     * 1. Arrays of lines
      * 2. Concrete Syntax Trees
      * 3. Abstract Syntax Trees
-     * 4. Multi-Column Tables 
+     * 4. Multi-Column Tables
      * 5. Hash Tables
      * 6. Hierarchical Key-Value Trees
 
@@ -143,15 +143,15 @@ namespace Quest
     // for Quest to integrate their favorite programming language or app, then they need
     // only implement the interface for the structures relevant to their language or
     // system.
-    
+
     struct LineArray {};
     struct ConcreteSyntaxTree {};
     struct AbstractSyntaxTree {};
     struct MultiColumnTable {};
     struct HashTable {};
     struct HierarchicalKVTree {};
-    
-    
+
+
     struct SemanticBuffer
     {
     };
@@ -201,5 +201,7 @@ namespace Quest
     struct DisplayBuffer
     {
     };
-        
+
 }
+
+#endif

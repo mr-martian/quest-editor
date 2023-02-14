@@ -5,6 +5,8 @@
 //     Richard Snyder (CodeTriangle),
 //     Daniel Swanson (popcorn-tomato-dude),
 //     and KillerBee13 (killerbee13)).
+#ifndef ROPE_H
+#define ROPE_H
 
 #include <algorithm>
 #include <cstring>
@@ -337,3 +339,5 @@ unsigned int Rope::internal_copy(RopeNode* n, char* buffer,
 //     return 0;				       //
 // }						       //
 /////////////////////////////////////////////////////////
+
+#endif
