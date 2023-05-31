@@ -199,10 +199,17 @@ auto parse_loop_constraint(tokenizer& tk, Scope& scope, Token&& t)
 	constraint->_condition = parse_expr(tk, scope);
 	return constraint;
 }
-auto parse_loop_else(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
-	if (not tk.gettok_if(Token::punct_semi)) {
-		tk.expect(Token::kw_else);
-		return parse_expr(tk, scope, {}, Loop_Expr);
+template <precedences P = Loop_Expr>
+auto parse_else_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
+	if (tk.gettok_if(Token::kw_else)) {
+		return parse_expr(tk, scope, {}, P);
+	} else {
+		return nullptr;
+	}
+}
+auto parse_else_block(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
+	if (tk.gettok_if(Token::kw_else)) {
+		return parse_block(tk, scope);
 	} else {
 		return nullptr;
 	}
@@ -223,7 +230,7 @@ auto parse_for_loop(tokenizer& tk, Scope& scope) -> unique_ptr<ForLoopExpr> {
 
 		expr->_range_expr = parse_expr(tk, scope, {Token::punct_lbrace});
 		expr->_body = parse_block(tk, scope);
-		expr->_else = parse_loop_else(tk, scope);
+		expr->_else = parse_else_expr(tk, scope);
 		return expr;
 	}
 
@@ -244,7 +251,7 @@ auto parse_for_loop(tokenizer& tk, Scope& scope) -> unique_ptr<ForLoopExpr> {
 			expr->_update = parse_expr(tk, scope, {Token::punct_lbrace});
 		}
 		expr->_body = parse_block(tk, scope);
-		expr->_else = parse_loop_else(tk, scope);
+		expr->_else = parse_else_expr(tk, scope);
 		return expr;
 	}
 
@@ -260,7 +267,7 @@ auto parse_for_loop(tokenizer& tk, Scope& scope) -> unique_ptr<ForLoopExpr> {
 	}
 
 	expr->_body = parse_block(tk, scope);
-	expr->_else = parse_loop_else(tk, scope);
+	expr->_else = parse_else_expr(tk, scope);
 	return expr;
 }
 
@@ -281,7 +288,7 @@ auto parse_loop_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
 		expr->_label = parse_label_decl(tk, scope);
 		expr->_constraint = parse_loop_constraint(tk, scope, tk.cur());
 		expr->_body = parse_block(tk, scope);
-		expr->_else = parse_loop_else(tk, scope);
+		expr->_else = parse_else_expr(tk, scope);
 		return expr;
 	} break;
 	case Token::kw_do: {
@@ -289,7 +296,7 @@ auto parse_loop_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
 		expr->_label = parse_label_decl(tk, scope);
 		expr->_body = parse_block(tk, scope);
 		expr->_constraint = parse_loop_constraint(tk, scope);
-		expr->_else = parse_loop_else(tk, scope);
+		expr->_else = parse_else_expr(tk, scope);
 		return expr;
 	} break;
 	default:
@@ -310,9 +317,7 @@ auto parse_if_expr1(tokenizer& tk, Scope& scope,
 	node->_target = expected;
 	node->_condition = parse_condition(tk, scope);
 	node->_body = parse_block(tk, scope);
-	if (auto e = tk.gettok_if(Token::kw_else)) {
-		node->_else_body = parse_block(tk, scope);
-	}
+	node->_else_body = parse_else_block(tk, scope);
 	return node;
 }
 /* inverted-if-expression ::=
@@ -327,9 +332,7 @@ auto parse_if_expr2(tokenizer& tk, Scope& scope,
 	node->_target = expected;
 	node->_condition = parse_condition(tk, scope);
 	node->_expr = parse_block(tk, scope);
-	if (auto e = tk.gettok_if(Token::kw_else)) {
-		node->_else_expr = parse_block(tk, scope);
-	}
+	node->_else_expr = parse_else_expr<If_Expr_Inverted_R>(tk, scope);
 	return node;
 }
 /* conditional-expression ::=

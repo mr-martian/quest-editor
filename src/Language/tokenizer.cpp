@@ -363,14 +363,14 @@ Token tokenizer::expect(const Token::Type t) {
 	if (auto n = gettok_if(t)) {
 		return *std::move(n);
 	} else {
-		throw unexpected(last, tok_name(Token{t, "", {}}));
+		throw unexpected(next, tok_name(Token{t, "", {}}));
 	}
 }
 Token tokenizer::expect(const Token::Type t, std::string expected_label) {
 	if (auto n = gettok_if(t)) {
 		return *std::move(n);
 	} else {
-		throw unexpected(last, expected_label);
+		throw unexpected(next, expected_label);
 	}
 }
 
