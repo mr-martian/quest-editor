@@ -346,9 +346,7 @@ tokenizer::tokenizer(std::istream& in, std::string filename, bool l,
     , _verbose(verbose) {
 	++_cur;
 	if (_verbose) {
-		std::cout << "TOKEN: " << std::setw(3) << next.type << ' '
-		          << tok_name(next) << '\n'
-		          << std::flush;
+		std::cout << next << '\n' << std::flush;
 	}
 }
 
@@ -426,9 +424,7 @@ void tokenizer::advance() {
 		                           last.str, //
 		                           std::back_inserter(formatted));*/
 		if (_verbose) {
-			std::cout << "TOKEN: " << std::setw(3) << next.type << ' '
-			          << tok_name(next) << '\n'
-			          << std::flush;
+			std::cout << next << '\n' << std::flush;
 		}
 	}
 	return;

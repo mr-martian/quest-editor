@@ -172,6 +172,19 @@ auto parse_label_decl(tokenizer& tk, Scope& scope) -> optional<string> {
 	}
 }
 
+/* condition ::=
+ *		   expression
+ * 	| 'let' var-definition equal-initializer
+ */
+auto parse_condition(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
+	if (tk.check(Token::kw_let)) {
+		// this probably expects a ';' and won't work
+		return parse_var_def(tk, scope, {});
+	} else {
+		return parse_expr(tk, scope, {Token::punct_lbrace});
+	}
+}
+
 auto parse_loop_constraint(tokenizer& tk, Scope& scope)
     -> unique_ptr<LoopConstraint> {
 	auto constraint = make_unique<LoopConstraint>(
@@ -285,16 +298,46 @@ auto parse_loop_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
 
 	throw 0;
 }
-template <Token::Type>
+/* if-expression ::=
+ *		  ('if' | 'unless') condition block ['else' (block | if-expression)]
+ */
 auto parse_if_expr1(tokenizer& tk, Scope& scope,
                     std::initializer_list<Token::Type> end_tok_types)
     -> unique_ptr<Node> {
-	throw 0;
+	auto kw = tk.expect({Token::kw_if, Token::kw_unless});
+	auto expected = kw.type == Token::kw_if;
+	auto node = make_unique<IfExpression>(std::move(kw));
+	node->_target = expected;
+	node->_condition = parse_condition(tk, scope);
+	node->_body = parse_block(tk, scope);
+	if (auto e = tk.gettok_if(Token::kw_else)) {
+		node->_else_body = parse_block(tk, scope);
+	}
+	return node;
 }
-template <Token::Type>
+/* inverted-if-expression ::=
+ *		  expression 'if' expression ['else' expression]
+ */
 auto parse_if_expr2(tokenizer& tk, Scope& scope,
                     std::initializer_list<Token::Type> end_tok_types,
                     unique_ptr<Node> left) -> unique_ptr<Node> {
+	auto kw = tk.expect({Token::kw_if, Token::kw_unless});
+	auto expected = kw.type == Token::kw_if;
+	auto node = make_unique<InvertedIfExpr>(std::move(kw));
+	node->_target = expected;
+	node->_condition = parse_condition(tk, scope);
+	node->_expr = parse_block(tk, scope);
+	if (auto e = tk.gettok_if(Token::kw_else)) {
+		node->_else_expr = parse_block(tk, scope);
+	}
+	return node;
+}
+/* conditional-expression ::=
+ *		  expression '?' expression ':' expression
+ */
+auto parse_cond_expr(tokenizer& tk, Scope& scope,
+                     std::initializer_list<Token::Type> end_tok_types,
+                     unique_ptr<Node> left) -> unique_ptr<Node> {
 	throw 0;
 }
 auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block> {
@@ -636,8 +679,12 @@ void Scope::default_ops() {
 	      Token::kw_return, Token::kw_yield},
 	     {&parse_prefix_expr<0>, Exit_expr});
 
-	reg1({Token::kw_if, Token::kw_unless},
-	     {&parse_if_expr1<Token::kw_else>, If_Expr_L});
+	reg1({Token::kw_if, Token::kw_unless}, {&parse_if_expr1, If_Expr_L});
+	reg2({Token::kw_if, Token::kw_unless}, {&parse_if_expr2, If_Expr_R});
+	reg2({Token::op_orelse},
+	     {&parse_binary_expr<Cond_Expr_R>, Cond_Expr_L, Cond_Expr_R});
+	reg2({Token::op_qm}, {&parse_cond_expr, Cond_Expr_L, Cond_Expr_R});
+
 	reg1({Token::kw_loop, Token::kw_while, Token::kw_for, Token::kw_do,
 	      Token::kw_until},
 	     {&drop_stop_tokens<parse_loop_expr>, Loop_Expr});
@@ -668,13 +715,9 @@ void Scope::default_ops() {
 	                        Null_Coalescing_Expr_L, Null_Coalescing_Expr_R});
 	reg2({Token::op_pipe},
 	     {&parse_binary_expr<Rewrite_Expr_R>, Rewrite_Expr_L, Rewrite_Expr_R});
-	reg2({Token::op_orelse},
-	     {&parse_binary_expr<Cond_Expr_R>, Cond_Expr_L, Cond_Expr_R});
-	reg2({Token::op_qm},
-	     {&parse_if_expr2<Token::punct_colon>, Cond_Expr_L, Cond_Expr_R});
 
+	// infix match?
 	reg2(Token::kw_match, {nullptr, Match_Expr});
-	reg2({Token::kw_if, Token::kw_unless}, {nullptr, If_Expr_L});
 
 	reg2(Token::punct_comma, {nullptr, Expr_List});
 

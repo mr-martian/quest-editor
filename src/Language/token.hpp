@@ -6,6 +6,7 @@
 #ifndef TOKEN_HPP
 #define TOKEN_HPP
 
+#include <iomanip>
 #include <stdexcept>
 #include <utility>
 
@@ -22,6 +23,8 @@ struct source_location {
 	auto operator<=>(const source_location&) const = default;
 };
 
+struct Token;
+std::string tok_name(Token t);
 struct Token {
 	enum Type {
 		eof = -1,
@@ -186,7 +189,17 @@ struct Token {
 	}
 	[[nodiscard]] explicit operator bool() const noexcept { return good(); }
 	auto operator<=>(const Token&) const = default;
+	friend std::ostream& operator<<(std::ostream& os, const Token& tok) {
+		os << "TOKEN[" << std::setw(3) << tok.type << "] " << tok.loc.line << ':'
+		   << tok.loc.col;
+		if (auto l = tok.loc.length; l > 1) {
+			os << '-' << tok.loc.col + l;
+		}
+		os << ' ' << tok_name(tok);
+		return os;
+	}
 };
+std::string tok_name(Token::Type t);
 
 enum class token_class {
 	unknown,
@@ -226,8 +239,6 @@ constexpr token_class tok_classify(Token::Type t) {
 	}
 	// no return here to ensure warning if not all cases covered
 }
-std::string tok_name(Token::Type t);
-std::string tok_name(Token t);
 
 class unexpected : public std::invalid_argument {
  public:

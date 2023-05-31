@@ -57,7 +57,7 @@ UINT			({UOCT}|{UHEX}|{UDEC})([Uu]?|[Uu][Ll]{0,2})
 CHAR			'(\\.|[^\\\n'])*'
 STRING		\"(\\.|\\\r?\n|[^\\\n"])*\"
 
-literal_int (0[ob])?[0-9]+|0x[[:xdigit:]]+
+literal_int [+-]?(0[ob])?[0-9]+|0x[[:xdigit:]]+
 digit	[0-9]
 hex_quad	[[:xdigit:]]{4}
 decimal_int {digit}+
@@ -90,14 +90,14 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 	co_yield token(Token::identifier, str().substr(1, str().size() - 2));
 }
 
-"/*"	{ start(COMMENT); }
+"/*"	{ start(COMMENT); std::cout << "comment\n"; }
 <COMMENT>{
 "*/"	{ start(INITIAL); }
 [^*]+	{ } // ignore everything in comments
 "*"+[^*/]*	{ } // ignore *s not followed by /
 <<EOF>>	{ lexer_error("Block comment not ended before end of file"); co_return; }
 }
-"//"[^\n]* { }
+"//"[^\n]* { std::cout << "comment\n"; }
 
 <ATTRIBUTE>{
 "]"            { co_yield token(Token::punct_rbrck); start(INITIAL); }

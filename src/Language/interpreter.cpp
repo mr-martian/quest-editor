@@ -29,22 +29,7 @@ int main(int argc, char** argv) try {
 		int tokens{};
 		for (auto tok : lex.lex()) {
 			++tokens;
-			const auto name = tok_name(tok.type);
-			/*constexpr auto& flag = "\x1B";
-			auto formatted = std::string{};
-			kblib::search_replace_copy(name,     //
-			                           flag,     //
-			                           last.str, //
-			                           std::back_inserter(formatted));*/
-			std::cout << "TOKEN: " << tok.type << ' '; // << formatted
-			for (auto c : name) {
-				if (c == '\x1B') {
-					std::cout << tok.str;
-				} else {
-					std::cout << c;
-				}
-			}
-			std::cout << '\n' << std::flush;
+			std::cout << tok << '\n' << std::flush;
 		}
 		std::cout << "Read " << tokens << " tokens.\n";
 	} else {

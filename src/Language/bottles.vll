@@ -7,6 +7,28 @@ export import foo;
 proc main_(argv, mut stdio)
 	= stdio.out.print("Hello, world!");
 
+proc abc(&mut `in`, &mut out) {
+	let mut a : [11]f64;
+	for &mut v in a {
+		`in`.parse(&v) ?? die("Invalid input (expected number)\n")
+	} else None;
+	for i in rev(enumerate(a)) { }
+	; // should not be necessary
+	; // *definitely* should not be necessary?
+	if rev(enumerate(a)) {
+	} // no else
+	; // should not be necessary
+	for i in rev(enumerate(a)) {
+		let y = fun(v);
+		// something is wrong with math parsing, function calls work
+		if /*y > 400*/ f(a) {
+			out.print("{} TOO LARGE\n".format(i))
+		} else {
+			out.print("{} {}\n".format(i, y))
+		}
+	} else None
+}
+
 // Some example function declarations:
 
 fn func1();
@@ -25,6 +47,7 @@ let verse = "{1} bottles of beer on the wall. {1} bottles of beer.\nTake one dow
 
 // example of stropping:
 let `strop` : i32 = 0;
+let math = 1 + 2 * 4 / (8 - 16);
 
 // function declaration
 export fn format_verse_s(count);
@@ -68,7 +91,7 @@ proc tpk(&mut `in`, &mut out) {
 	} else None;
 	for i in rev(enumerate(a)) {
 		let y = fun(v);
-		if y > 400 {
+		if /*y > 400*/ rev(enumerate(a)) {
 			out.print("{} TOO LARGE\n".format(i))
 		} else {
 			out.print("{} {}\n".format(i, y))

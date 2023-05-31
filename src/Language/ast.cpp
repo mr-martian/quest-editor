@@ -501,6 +501,38 @@ std::ostream& GForExpr::pretty_print(std::ostream& os) const {
 	return os << ")" << unnest;
 }
 
+std::ostream& IfExpression::pretty_print(std::ostream& os) const {
+	os << "(if " << (_target ? "'if'" : "'unless'");
+	os << '\n' << nest << indent << '(';
+	_condition->pretty_print(os);
+	os << ") (";
+	_body->pretty_print(os);
+	os << ")";
+	if (_else_body) {
+		os << " (";
+		_else_body->pretty_print(os);
+		os << ')';
+	}
+	os << ')';
+	return os << ")" << unnest;
+}
+
+std::ostream& InvertedIfExpr::pretty_print(std::ostream& os) const {
+	os << "(trailing-if " << (_target ? "'if'" : "'unless'");
+	os << '\n' << nest << indent << '(';
+	_expr->pretty_print(os);
+	os << ") (";
+	_condition->pretty_print(os);
+	os << ")";
+	if (_else_expr) {
+		os << " (";
+		_else_expr->pretty_print(os);
+		os << ')';
+	}
+	os << ')';
+	return os << ")" << unnest;
+}
+
 } // namespace AST
 std::size_t std::hash<AST::Discriminators>::operator()(
     const AST::Discriminators& discrim) const {

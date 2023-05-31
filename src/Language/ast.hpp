@@ -861,8 +861,8 @@ class IfExpression : public ControlExpr {
  public:
 	unique_ptr<Node> _condition;
 	bool _target{};
-	unique_ptr<Block> _true_body;
-	unique_ptr<Node> _false_body;
+	unique_ptr<Block> _body;
+	unique_ptr<Node> _else_body;
 
 	std::ostream& pretty_print(std::ostream& os) const override;
 
@@ -879,9 +879,22 @@ class IfExpression : public ControlExpr {
 
 class InvertedIfExpr : public ControlExpr {
  public:
-	unique_ptr<Node> _body;
+	unique_ptr<Node> _expr;
 	unique_ptr<Node> _condition;
+	unique_ptr<Node> _else_expr;
 	bool _target{};
+
+	std::ostream& pretty_print(std::ostream& os) const override;
+
+	// t should refer to the 'if' keyword
+	InvertedIfExpr(Token&& t)
+	    : Node(std::move(t))
+	    , ControlExpr(nullptr) {}
+
+ protected:
+	InvertedIfExpr(nullptr_t)
+	    : Node(nullptr)
+	    , ControlExpr(nullptr) {}
 };
 
 class LoopExpr : public ControlExpr {
