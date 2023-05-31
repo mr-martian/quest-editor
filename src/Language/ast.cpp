@@ -268,7 +268,7 @@ std::ostream& ExprList::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& PrefixExpr::pretty_print(std::ostream& os) const {
-	os << "(pre ";
+	os << "(prefix ";
 	assert(_op);
 	_op->pretty_print(os);
 	assert(_operand);
@@ -278,7 +278,7 @@ std::ostream& PrefixExpr::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& PostfixExpr::pretty_print(std::ostream& os) const {
-	os << "(post ";
+	os << "(postfix ";
 	assert(_op);
 	_op->pretty_print(os);
 	assert(_operand);
@@ -288,7 +288,7 @@ std::ostream& PostfixExpr::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& BinaryExpr::pretty_print(std::ostream& os) const {
-	os << "(in ";
+	os << "(infix ";
 	assert(_op);
 	_op->pretty_print(os);
 	assert(_left);

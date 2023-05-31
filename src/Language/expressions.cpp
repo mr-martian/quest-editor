@@ -368,10 +368,18 @@ auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block> {
 	}
 	return list;
 }
+
 auto parse_parenthesized_expr(tokenizer& tk, Scope& scope,
                               std::initializer_list<Token::Type> end_tok_types)
     -> unique_ptr<Node> {
-	throw 0;
+	auto l = tk.expect(Token::punct_lparen);
+	if (not tk.gettok_if(Token::punct_rparen)) {
+		auto expr = parse_expr(tk, scope, {Token::punct_rparen});
+		tk.expect(Token::punct_rparen);
+		return expr;
+	} else {
+		return make_unique<NullExpr>(std::move(l));
+	}
 }
 template <Token::Type end>
 auto parse_call_expr(tokenizer& tk, Scope& scope,
@@ -379,11 +387,13 @@ auto parse_call_expr(tokenizer& tk, Scope& scope,
                      unique_ptr<Node> left) -> unique_ptr<Node> {
 	auto ret = std::make_unique<CallExpr>(tk.gettok());
 	ret->_fun = std::move(left);
-	ret->_args.push_back(parse_expr(tk, scope, {Token::punct_comma}));
-	while (tk.gettok_if(Token::punct_comma)) {
+	if (not tk.gettok_if(end)) {
 		ret->_args.push_back(parse_expr(tk, scope, {Token::punct_comma}));
+		while (tk.gettok_if(Token::punct_comma)) {
+			ret->_args.push_back(parse_expr(tk, scope, {Token::punct_comma}));
+		}
+		tk.expect(end);
 	}
-	tk.expect(end);
 	return ret;
 }
 
@@ -417,10 +427,10 @@ auto read_bracketed_expr(tokenizer& tk, Scope& scope,
                          std::initializer_list<Token::Type> end_tok_types,
                          std::vector<Token>& expr) -> void {
 	tk.expect(begin);
+	if (tk.gettok_if(end)) {
+		return;
+	}
 	while (auto& tok = expr.emplace_back(tk.peek())) {
-		if (tok.type == end) {
-			return;
-		}
 		switch (tok.type) {
 		case Token::punct_rparen:
 		case Token::punct_rbrck:
@@ -768,7 +778,8 @@ unique_ptr<Node> parse_expr(tokenizer& tk, Scope& scope,
 			}
 			expr = (infix_i->second)(tk, scope, end_tok_types, std::move(expr));
 		} else {
-			throw 1;
+			// next token not valid for expression, but not one of the stop tokens
+			break;
 		}
 	}
 	return expr;

@@ -14,14 +14,12 @@ proc abc(&mut `in`, &mut out) {
 	} else None;
 	for i in rev(enumerate(a)) { }
 	; // should not be necessary
-	; // *definitely* should not be necessary?
 	if rev(enumerate(a)) {
 	} // no else
 	; // should not be necessary
 	for i in rev(enumerate(a)) {
 		let y = fun(v);
-		// something is wrong with math parsing, function calls work
-		if /*y > 400*/ f(a) {
+		if y > 400 {
 			out.print("{} TOO LARGE\n".format(i))
 		} else {
 			out.print("{} {}\n".format(i, y))
@@ -47,6 +45,7 @@ let verse = "{1} bottles of beer on the wall. {1} bottles of beer.\nTake one dow
 
 // example of stropping:
 let `strop` : i32 = 0;
+let call = f();
 let math = 1 + 2 * 4 / (8 - 16);
 
 // function declaration
@@ -79,7 +78,7 @@ fn fun(x) = sqrt(abs(x)) + 5 * x.pow(3);
 proc sing_s(mut out) {
 	for count = 99 -> 1 {
 		out.print(format_verse_s(count));
-	};;
+	};
 	out.print("No more bottles of beer on the wall, no more bottles of beer.\n");
 	out.print("Go to the store and buy some more, 99 bottles of beer on the wall...\n");
 }

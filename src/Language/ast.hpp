@@ -171,9 +171,17 @@ std::ostream& nest(std::ostream& os);
 std::ostream& unnest(std::ostream& os);
 
 class NullExpr : virtual public Node {
-	using Node::Node;
+ public:
+	explicit NullExpr(Token&& t)
+	    : Node(std::move(t)) {}
+	explicit NullExpr(Token&& t, vector<unique_ptr<Node>> attr)
+	    : Node(std::move(t), std::move(attr)) {}
 
 	auto pretty_print(std::ostream& os) const -> std::ostream& override;
+
+ protected:
+	explicit NullExpr(nullptr_t)
+	    : Node(nullptr) {}
 };
 
 /*

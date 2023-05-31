@@ -333,7 +333,8 @@ std::string tok_name(Token t) {
 
 std::string unexpected::format_str(Token found, std::string expected) {
 	using namespace std::literals;
-	return kblib::concat("expected "sv, expected, " before "sv, tok_name(found));
+	return kblib::concat("expected "sv, expected, " before "sv,
+	                     kblib::lexical_cast<std::string>(found));
 }
 
 tokenizer::tokenizer(std::istream& in, std::string filename, bool l,
