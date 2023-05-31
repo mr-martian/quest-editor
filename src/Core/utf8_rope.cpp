@@ -106,4 +106,12 @@ utf8_rope::reference utf8_rope::at(utf8_rope::size_type idx) {}
 
 utf8_rope::const_reference utf8_rope::at(utf8_rope::size_type idx) const {}
 
+utf8_rope::iterator utf8_rope::nth(utf8_rope::size_type idx) noexcept {}
+
+utf8_rope::const_iterator utf8_rope::nth(
+    utf8_rope::size_type idx) const noexcept {}
+
+utf8_rope::size_type utf8_rope::index_of(
+    utf8_rope::const_iterator it) const noexcept {}
+
 } // namespace quest

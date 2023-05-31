@@ -37,8 +37,6 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	add_compile_options(/W3)
 endif()
 
-add_executable(ast_generator ast_generator.cpp)
-
 add_executable(interpreter
 	ast.hpp token.hpp
 	interpreter.cpp parser.cpp scope.cpp tokenizer.cpp ast.cpp expressions.cpp
@@ -56,6 +54,8 @@ target_link_libraries(interpreter PUBLIC
 	LLVMBinaryFormat LLVMSupport LLVMDemangle
 	rt dl tinfo pthread m
 	"${EXTRA_LIBS}")
+
+add_executable(ast_generator ast_generator.cpp)
 
 # used to add non-installed libraries
 target_include_directories(ast_generator

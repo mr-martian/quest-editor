@@ -46,14 +46,14 @@ class utf8_rope {
 	utf8_rope(char8_t, size_type) = delete;
 	utf8_rope(char, size_type) = delete;
 
-	utf8_rope(std::string_view str);
-	utf8_rope(std::u8string_view str);
+	explicit utf8_rope(std::string_view str);
+	explicit utf8_rope(std::u8string_view str);
 
 	template <typename InputIt, typename Sentinel>
 	utf8_rope(InputIt begin, Sentinel end);
 
-	utf8_rope(std::initializer_list<char8_t> il);
-	utf8_rope(std::initializer_list<char> il);
+	explicit utf8_rope(std::initializer_list<char8_t> il);
+	explicit utf8_rope(std::initializer_list<char> il);
 	utf8_rope& operator=(std::initializer_list<char8_t> il);
 	utf8_rope& operator=(std::initializer_list<char> il);
 
@@ -145,6 +145,11 @@ class utf8_rope {
 	reference at(size_type idx);
 	const_reference at(size_type idx) const;
 
+	iterator nth(size_type idx) noexcept;
+	const_iterator nth(size_type idx) const noexcept;
+
+	size_type index_of(const_iterator it) const noexcept;
+
 	friend std::ostream& operator<<(std::ostream&, const utf8_rope&);
 
  private:
@@ -160,7 +165,8 @@ class utf8_rope {
 
 		std::shared_ptr<node> left{}, right{};
 		std::shared_ptr<const char[]> data{};
-		size_type l_chars{}, l_codepoints{}, l_graphemes{}, l_lines{};
+		size_type l_chars{}, l_codepoints{}, l_graphemes{}, l_clusters{},
+		    l_lines{};
 	};
 
 	std::shared_ptr<node> tree;
