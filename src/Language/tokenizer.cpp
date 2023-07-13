@@ -20,6 +20,8 @@ std::string tok_name(Token::Type t) {
 	//@unknown:string
 	case Token::unknown:
 		return "unkown token \"\x1B\"";
+	case Token::illegal_literal:
+		return "illegal literal \"\x1B\"";
 
 	//@literal:string
 	case Token::literal_int:

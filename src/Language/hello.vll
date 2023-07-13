@@ -1,8 +1,4 @@
 module hello;
-2.abs 2 .abs 2..abs 2.0.abs
-x.0
-
-1 1.0 -1 -1.0
 
 import std;
 
@@ -11,4 +7,39 @@ proc main(argv, mut stdio);
 let str = "Hello world!\n";
 
 proc main(argv, mut stdio)
-	= stdio.out.print(str);
+   = stdio.out.print(str);
+
+
+2.abs 2 .abs 2..abs 2.0.abs
+x.0
+
+1 1.0 -1 -1.0
+
+let raw_str = "\
+         0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F\
+U+1FB0x  🬀  🬁  🬂  🬃  🬄  🬅  🬆  🬇  🬈  🬉  🬊  🬋  🬌  🬍  🬎  🬏\
+U+1FB1x  🬐  🬑  🬒  🬓  🬔  🬕  🬖  🬗  🬘  🬙  🬚  🬛  🬜  🬝  🬞  🬟\
+U+1FB2x  🬠  🬡  🬢  🬣  🬤  🬥  🬦  🬧  🬨  🬩  🬪  🬫  🬬  🬭  🬮  🬯\
+U+1FB3x  🬰  🬱  🬲  🬳  🬴  🬵  🬶  🬷  🬸  🬹  🬺  🬻  🬼  🬽  🬾  🬿\
+U+1FB4x  🭀  🭁  🭂  🭃  🭄  🭅  🭆  🭇  🭈  🭉  🭊  🭋  🭌  🭍  🭎  🭏\
+U+1FB5x  🭐  🭑  🭒  🭓  🭔  🭕  🭖  🭗  🭘  🭙  🭚  🭛  🭜  🭝  🭞  🭟\
+U+1FB6x  🭠  🭡  🭢  🭣  🭤  🭥  🭦  🭧  🭨  🭩  🭪  🭫  🭬  🭭  🭮  🭯\
+U+1FB7x  🭰  🭱  🭲  🭳  🭴  🭵  🭶  🭷  🭸  🭹  🭺  🭻  🭼  🭽  🭾  🭿\
+U+1FB8x  🮀  🮁  🮂  🮃  🮄  🮅  🮆  🮇  🮈  🮉  🮊  🮋  🮌  🮍  🮎  🮏\
+U+1FB9x  🮐  🮑  🮒     🮔  🮕  🮖  🮗  🮘  🮙  🮚  🮛  🮜  🮝  🮞  🮟\
+U+1FBAx  🮠  🮡  🮢  🮣  🮤  🮥  🮦  🮧  🮨  🮩  🮪  🮫  🮬  🮭  🮮  🮯\
+U+1FBBx  🮰  🮱  🮲  🮳  🮴  🮵  🮶  🮷  🮸  🮹  🮺  🮻  🮼  🮽  🮾  🮿\
+U+1FBCx  🯀  🯁  🯂  🯃  🯄  🯅  🯆  🯇  🯈  🯉  🯊               \
+U+1FBDx \
+U+1FBEx \
+U+1FBFx  🯰  🯱  🯲  🯳  🯴  🯵  🯶  🯷  🯸  🯹                 ";
+let t = "🮀🮵🮶🮀";//*/
+let a = "\n";
+let b = "\"";
+let c = "\
+a\
+";
+let d = "\q";
+let e = "\ ";
+let f = "
+";

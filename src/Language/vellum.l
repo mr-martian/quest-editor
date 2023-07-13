@@ -68,9 +68,11 @@ UCN	(?x)"\\u"{hex_quad} \
 	| "\\U"{hex_quad}{hex_quad} \
 	| "\\u{"[[:xdigit:]]+"}" \
 	| {named_UCN}
-simple_escape	\\[?0abfnrtv]|\\\"|\\'
+simple_escape	\\[?0abfnrtv\"']
 escape_sequence	{simple_escape}|"\\x"([[:xdigit:]][[:xdigit:]]?|"{"[[:xdigit:]]+"}")
-literal_string \"([^"\"\\\n"]|{escape_sequence}|{UCN})*\"
+literal_string (?m)\"([^"\"\\\n"]|{escape_sequence}|{UCN}|(?:\\\n))*\"
+illegal_escape	\\[^?0abfnrtv\"']
+illegal_string (?m)\"([^"\"\\"]|{escape_sequence}|{UCN}|(?:\\\n)|{illegal_escape})*\"
 
 identifier	\p{Letter}[\p{Letter}\d_]*
 operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
@@ -107,6 +109,7 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 {literal_int}   	{ co_yield token(Token::literal_int, str()); }
 {literal_float} 	{ co_yield token(Token::literal_float, str()); }
 {literal_string}	{ co_yield token(Token::literal_string, str()); }
+{illegal_string}	{ co_yield token(Token::illegal_literal, str()); }
 
 "Bool"   	{ co_yield token(Token::kw_Bool); }
 "Byte"   	{ co_yield token(Token::kw_Byte); }

@@ -29,6 +29,7 @@ struct Token {
 	enum Type {
 		eof = -1,
 		unknown = 0,
+		illegal_literal,
 
 		literal_int,
 		literal_float,
@@ -220,7 +221,8 @@ constexpr token_class tok_classify(Token::Type t) {
 		return token_class::eof;
 	} else if (v == Token::unknown) {
 		return token_class::unknown;
-	} else if (in_range_i(v, {Token::literal_int, Token::literal_string})) {
+	} else if (in_range_i(v, {Token::literal_int, Token::literal_string})
+	           or v == Token::illegal_literal) {
 		return token_class::literal;
 	} else if (in_range_i(v, {Token::punct_lbrace, Token::punct_substr_e})) {
 		return token_class::punct;
