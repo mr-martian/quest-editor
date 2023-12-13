@@ -31,7 +31,7 @@ struct Token {
 		unknown = 0,
 		illegal_literal,
 
-		literal_int,
+		literal_int = 16,
 		literal_float,
 		literal_char,
 		literal_string,

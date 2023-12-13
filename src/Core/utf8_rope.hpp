@@ -153,20 +153,41 @@ class utf8_rope {
 	friend std::ostream& operator<<(std::ostream&, const utf8_rope&);
 
  private:
-	static constexpr size_type target_fragment_length = 4032;
+	static constexpr size_type target_fragment_length = 4096;
 	static constexpr size_type max_size_ = size_type(-1) >> 1;
+
+	struct sizes {
+		size_type chars{}, codepoints{}, graphemes{}, clusters{}, lines{};
+	};
+	static sizes find_last_cluster_within(std::string_view str);
 
 	template <typename CharT>
 	friend class utf8_rope_iterator;
+
 	class node {
 		friend class utf8_rope;
+
 		template <typename CharT>
 		friend class utf8_rope_iterator;
 
-		std::shared_ptr<node> left{}, right{};
-		std::shared_ptr<const char[]> data{};
-		size_type l_chars{}, l_codepoints{}, l_graphemes{}, l_clusters{},
-		    l_lines{};
+		struct children_t {
+			std::shared_ptr<node> left{}, right{};
+			size_type l_chars{};
+		};
+		std::variant<children_t, std::string> data;
+		size_type l_codepoints{}, l_graphemes{}, l_clusters{}, l_lines{};
+
+		static std::shared_ptr<node> allocate_subtree(std::string_view contents,
+		                                              std::size_t capacity = 0);
+
+		size_type size_chars() const;
+		size_type size_codepoints() const;
+		size_type size_graphemes() const;
+		size_type size_clusters() const;
+		size_type size_lines() const;
+		sizes size_all() const;
+
+		void assign_from(sizes sz);
 	};
 
 	std::shared_ptr<node> tree;

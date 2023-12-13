@@ -8,6 +8,8 @@
  * ****************************************************************************/
 #include "utf8_rope.hpp"
 
+#include <deque>
+
 namespace quest {
 
 utf8_rope::utf8_rope(utf8_rope::size_type num, char8_t val) {}
@@ -113,5 +115,37 @@ utf8_rope::const_iterator utf8_rope::nth(
 
 utf8_rope::size_type utf8_rope::index_of(
     utf8_rope::const_iterator it) const noexcept {}
+
+utf8_rope::sizes utf8_rope::find_last_cluster_within(std::string_view str) {}
+
+std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
+    const std::string_view contents, std::size_t capacity) {
+	capacity = std::max(capacity, contents.size());
+	if (capacity > max_size_) {
+		throw std::length_error("rope: requested size greater than max_size()");
+	} else {
+		// divide string into approximately equal segments
+		auto remaining_length = capacity;
+		auto remaining_contents = contents;
+		std::deque<std::shared_ptr<node>> queue;
+		while (remaining_length < capacity) {
+			auto partition = find_last_cluster_within(
+			    remaining_contents.substr(0, target_fragment_length));
+			auto& node_ = *queue.emplace_back(std::make_shared<node>());
+			node_.data.emplace<std::string>(
+			    remaining_contents.substr(0, partition.chars));
+			node_.assign_from(partition);
+			remaining_contents.remove_prefix(partition.chars);
+			remaining_length -= partition.chars;
+		}
+		if (remaining_length) {
+			auto& node_ = *queue.emplace_back(std::make_shared<node>());
+			node_.data.emplace<std::string>(remaining_contents);
+		}
+
+		// build tree out of segments
+		std::abort();
+	}
+}
 
 } // namespace quest
