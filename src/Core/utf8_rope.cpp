@@ -12,11 +12,11 @@
 
 namespace quest {
 
-utf8_rope::utf8_rope(utf8_rope::size_type num, char8_t val) {}
-
 utf8_rope::utf8_rope(std::string_view str) {}
 
-utf8_rope::utf8_rope(std::u8string_view str) {}
+utf8_rope::utf8_rope(std::u8string_view str)
+    : utf8_rope(std::string_view(reinterpret_cast<const char*>(str.data()),
+                                 str.size())) {}
 
 utf8_rope::utf8_rope(std::initializer_list<char8_t> il) {}
 
@@ -56,11 +56,9 @@ utf8_rope::const_reverse_iterator utf8_rope::rend() const noexcept {}
 
 utf8_rope::const_reverse_iterator utf8_rope::crend() const noexcept {}
 
-void utf8_rope::swap(utf8_rope&) noexcept {}
+void utf8_rope::swap(utf8_rope& other) noexcept { std::swap(tree, other.tree); }
 
-utf8_rope::size_type utf8_rope::size() const noexcept {}
-
-bool utf8_rope::empty() const noexcept {}
+bool utf8_rope::empty() const noexcept { return tree->empty(); }
 
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos,
                                       char8_t val) {}
@@ -86,7 +84,7 @@ utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator pos) {}
 utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator begin,
                                      utf8_rope::const_iterator end) {}
 
-void utf8_rope::clear() noexcept {}
+void utf8_rope::clear() noexcept { tree.reset(); }
 
 utf8_rope::reference utf8_rope::front() {}
 
@@ -104,19 +102,21 @@ void utf8_rope::pop_front() noexcept {}
 
 void utf8_rope::pop_back() noexcept {}
 
-utf8_rope::reference utf8_rope::at(utf8_rope::size_type idx) {}
+// utf8_rope::reference utf8_rope::at(utf8_rope::size_type idx) {}
 
-utf8_rope::const_reference utf8_rope::at(utf8_rope::size_type idx) const {}
+// utf8_rope::const_reference utf8_rope::at(utf8_rope::size_type idx) const {}
 
-utf8_rope::iterator utf8_rope::nth(utf8_rope::size_type idx) noexcept {}
+// utf8_rope::iterator utf8_rope::nth(utf8_rope::size_type idx) noexcept {}
 
-utf8_rope::const_iterator utf8_rope::nth(
-    utf8_rope::size_type idx) const noexcept {}
+// utf8_rope::const_iterator utf8_rope::nth(
+//    utf8_rope::size_type idx) const noexcept {}
 
-utf8_rope::size_type utf8_rope::index_of(
-    utf8_rope::const_iterator it) const noexcept {}
+// utf8_rope::size_type utf8_rope::index_of(
+//    utf8_rope::const_iterator it) const noexcept {}
 
-utf8_rope::sizes utf8_rope::find_last_cluster_within(std::string_view str) {}
+utf8_rope::sizes utf8_rope::find_last_cluster_within(std::string_view str) {
+	return {str.size(), str.size(), str.size(), str.size(), str.size()};
+}
 
 std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
     const std::string_view contents, std::size_t capacity) {
@@ -127,14 +127,25 @@ std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
 		// divide string into approximately equal segments
 		auto remaining_length = capacity;
 		auto remaining_contents = contents;
-		std::deque<std::shared_ptr<node>> queue;
+		struct fragment_t {
+			std::shared_ptr<node> tree{};
+			sizes cumulative{};
+		};
+		std::deque<fragment_t> queue;
+
 		while (remaining_length) {
 			auto partition = find_last_cluster_within(
 			    remaining_contents.substr(0, target_fragment_length));
-			auto& node_ = *queue.emplace_back(std::make_shared<node>());
-			node_.data.emplace<std::string>(
-			    remaining_contents.substr(0, partition.chars));
+			auto& fragment = queue.emplace_back(
+			    fragment_t{std::make_shared<node>(node::leaf)});
+
+			auto& node_ = *fragment.tree;
+			std::get<std::string>(node_.data)
+			    .assign(remaining_contents.substr(0, partition.chars));
 			node_.assign_from(partition);
+
+			fragment.cumulative += partition;
+
 			remaining_contents.remove_prefix(partition.chars);
 			remaining_length -= partition.chars;
 		}
