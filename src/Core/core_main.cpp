@@ -36,12 +36,12 @@ int main(int argc, char** argv) {
 	auto it = r.begin();
 	for (std::size_t i = 0; i < file.size(); ++i) {
 		bool error{};
-		if (file[i] != static_cast<char>(r[i])) {
+		if (char c = r[i]; file[i] != c) {
 			error = true;
 			if (--limit >= 0) {
-				std::cout << kblib::escapify(kblib::concat(
-				    "index mismatch: file[", i, "] (", file[i], ") != r[", i, "] (",
-				    static_cast<char>(r[i]), ")"))
+				std::cout << kblib::escapify(
+				    kblib::concat("index mismatch: file[", i, "] (", file[i],
+				                  ") != r[", i, "] (", c, ")"))
 				          << '\n';
 			}
 		}

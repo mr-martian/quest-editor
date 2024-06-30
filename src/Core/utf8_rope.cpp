@@ -177,7 +177,7 @@ utf8_rope::sizes utf8_rope::find_last_cluster_within(
 	utf8_rope::sizes sz{};
 	auto last = str.begin();
 	for (auto it = str.begin(); it != str.end(); ++it) {
-		if (*it <= 0x7F) {
+		if (not (*it & 0x80)) {
 			++sz.codepoints;
 			++sz.clusters;
 			if (is_newline_after(std::string_view{it, str.end()})) {
@@ -196,7 +196,7 @@ utf8_rope::sizes count_sizes(const std::string_view str) {
 	utf8_rope::sizes sz{};
 	sz.chars = str.size();
 	for (auto it = str.begin(); it != str.end(); ++it) {
-		if (*it <= 0x7F) {
+		if (not (*it & 0x80)) {
 			++sz.codepoints;
 			++sz.clusters;
 			if (is_newline_after(std::string_view{it, str.end()})) {
