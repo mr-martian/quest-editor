@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
 	if (argc == 0) {
 		return 0;
 	}
-	auto file = kblib::get_file_contents(argv[1]).value_or("");
+	auto file = kblib::get_file_contents<std::u8string>(argv[1]).value_or(u8"");
 	quest::utf8_rope r{file};
 	std::cout << "read " << file.size() << " bytes\n"
 	          << "rope size_all(): " << r.size_all() << "\nwc: " << std::flush;
@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
 	auto it = r.begin();
 	for (std::size_t i = 0; i < file.size(); ++i) {
 		bool error{};
-		if (char c = r[i]; file[i] != c) {
+		if (auto c = r[i]; file[i] != c) {
 			error = true;
 			if (--limit >= 0) {
 				std::cout << kblib::escapify(
@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
 				          << '\n';
 			}
 		}
-		if (char c = *it++; file[i] != c) {
+		if (auto c = *it++; file[i] != c) {
 			error = true;
 			if (--limit >= 0) {
 				std::cout << kblib::escapify(kblib::concat(
@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
 				    ")")) << '\n';
 			}
 		}
-		if (char c = *r.nth(i); file[i] != c) {
+		if (auto c = *r.nth(i); file[i] != c) {
 			error = true;
 			if (--limit >= 0) {
 				std::cout << kblib::escapify(
@@ -62,7 +62,8 @@ int main(int argc, char** argv) {
 				          << '\n';
 			}
 		}
-		if (char c = *(r.begin() + i); file[i] != c) {
+		if (auto c = *(r.begin() + static_cast<std::ptrdiff_t>(i));
+		    file[i] != c) {
 			error = true;
 			if (--limit >= 0) {
 				std::cout << kblib::escapify(

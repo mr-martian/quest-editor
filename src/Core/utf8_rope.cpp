@@ -152,8 +152,8 @@ utf8_rope::const_reference utf8_rope::operator[](
 
 char32_t pop_code_point(std::string_view& str) {
 	assert(not str.empty());
-	if (str[0] <= 0x7F) {
-		char32_t c = str[0];
+	if (not (str[0] & 0x80)) {
+		auto c = static_cast<char32_t>(str[0]);
 		str.remove_prefix(1);
 		return c;
 	} else {
@@ -186,7 +186,7 @@ utf8_rope::sizes utf8_rope::find_last_cluster_within(
 			last = it;
 		}
 	}
-	sz.chars = last - str.begin() + 1;
+	sz.chars = static_cast<std::size_t>(last - str.begin() + 1);
 	// std::cout << "f_l_c_w: " << sz << '\n';
 	assert(sz.validate());
 	return sz;
@@ -320,7 +320,7 @@ void debug_print_tree_i(const utf8_rope::node* n) {
 		    },
 		    [](const std::u8string& s) {
 			    auto sv = std::string_view(reinterpret_cast<const char*>(s.data()),
-			                               std::min(s.size(), 16uz));
+			                               std::min(s.size(), std::size_t{16}));
 			    std::cout << s.size() << std::quoted(sv) << "...";
 		    });
 		std::cout << "}\n";

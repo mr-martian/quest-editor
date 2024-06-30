@@ -449,8 +449,8 @@ class utf8_rope {
 				assert(p);
 				if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
 					fragment = s->data();
-					fragment_size = s->size();
-					fragment_index = idx;
+					fragment_size = static_cast<std::uint16_t>(s->size());
+					fragment_index = static_cast<std::uint16_t>(idx);
 					return;
 				} else if (node::children_t* ch
 				           = std::get_if<node::children_t>(&p->data)) {
@@ -503,7 +503,7 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 
 	friend utf8_rope_iterator operator+(utf8_rope_iterator it,
 	                                    difference_type d) {
-		it.index += d;
+		it.index += static_cast<std::size_t>(d);
 		it.recalculate_from_index();
 		return it;
 	}
