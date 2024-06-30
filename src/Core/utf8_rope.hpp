@@ -485,17 +485,17 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 	}
 	utf8_rope_iterator(const utf8_rope_iterator&) = default;
 	utf8_rope_iterator(utf8_rope_iterator&&) = default;
-	utf8_rope_iterator(const utf8_rope_iterator<std::remove_const_t<CharT>>&
-	                       o) requires std::is_const_v<CharT>
-	    : utf8_rope::iterator_base{o.root, o.fragment, o.index, o.fragment_size,
-	                               o.fragment_index} {}
+	utf8_rope_iterator(
+	    const utf8_rope_iterator<std::remove_const_t<CharT>>& o) //
+	    requires std::is_const_v<CharT>
+	    : utf8_rope::iterator_base{
+	          static_cast<const utf8_rope::iterator_base&>(o)} {}
 	utf8_rope_iterator& operator=(const utf8_rope_iterator&) = default;
 	utf8_rope_iterator& operator=(utf8_rope_iterator&&) = default;
 	utf8_rope_iterator& operator=(
 	    const utf8_rope_iterator<std::remove_const_t<CharT>>&
 	        o) requires std::is_const_v<CharT> {
-		*this = utf8_rope::iterator_base{o.root, o.fragment, o.index,
-		                                 o.fragment_size, o.fragment_index};
+		*this = static_cast<const utf8_rope::iterator_base&>(o);
 	}
 
 	reference operator*() const { return fragment[fragment_index]; }
