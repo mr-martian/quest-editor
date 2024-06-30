@@ -34,34 +34,6 @@ void utf8_rope::assign(std::u8string_view str) {}
 
 void utf8_rope::assign(utf8_rope::size_type num, char8_t val) {}
 
-utf8_rope::iterator utf8_rope::begin() noexcept {}
-
-utf8_rope::const_iterator utf8_rope::begin() const noexcept {}
-
-utf8_rope::const_iterator utf8_rope::cbegin() const noexcept {}
-
-utf8_rope::iterator utf8_rope::end() noexcept {}
-
-utf8_rope::const_iterator utf8_rope::end() const noexcept {}
-
-utf8_rope::const_iterator utf8_rope::cend() const noexcept {}
-
-utf8_rope::reverse_iterator utf8_rope::rbegin() noexcept {}
-
-utf8_rope::const_reverse_iterator utf8_rope::rbegin() const noexcept {}
-
-utf8_rope::const_reverse_iterator utf8_rope::crbegin() const noexcept {}
-
-utf8_rope::reverse_iterator utf8_rope::rend() noexcept {}
-
-utf8_rope::const_reverse_iterator utf8_rope::rend() const noexcept {}
-
-utf8_rope::const_reverse_iterator utf8_rope::crend() const noexcept {}
-
-void utf8_rope::swap(utf8_rope& other) noexcept { std::swap(tree, other.tree); }
-
-bool utf8_rope::empty() const noexcept { return tree->empty(); }
-
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos,
                                       char8_t val) {}
 
@@ -86,15 +58,38 @@ utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator pos) {}
 utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator begin,
                                      utf8_rope::const_iterator end) {}
 
-void utf8_rope::clear() noexcept { tree.reset(); }
+// avoids calculating size (and descending the tree twice)
+utf8_rope::reference utf8_rope::back() {
+	node* p{tree.get()};
+	assert(p);
 
-utf8_rope::reference utf8_rope::front() {}
+	while (true) {
+		assert(p);
+		if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
+			assert(not s->empty());
+			return s->back();
+		} else if (node::children_t* ch
+		           = std::get_if<node::children_t>(&p->data)) {
+			p = ch->right.get();
+		}
+	}
+}
 
-utf8_rope::const_reference utf8_rope::front() const {}
+utf8_rope::const_reference utf8_rope::back() const {
+	node* p{tree.get()};
+	assert(p);
 
-utf8_rope::reference utf8_rope::back() {}
-
-utf8_rope::const_reference utf8_rope::back() const {}
+	while (true) {
+		assert(p);
+		if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
+			assert(not s->empty());
+			return s->back();
+		} else if (node::children_t* ch
+		           = std::get_if<node::children_t>(&p->data)) {
+			p = ch->right.get();
+		}
+	}
+}
 
 void utf8_rope::push_front(char8_t val) {}
 
@@ -104,9 +99,48 @@ void utf8_rope::pop_front() {}
 
 void utf8_rope::pop_back() {}
 
-// utf8_rope::reference utf8_rope::at(utf8_rope::size_type idx) {}
+utf8_rope::reference utf8_rope::operator[](utf8_rope::size_type idx) noexcept {
+	node* p{tree.get()};
 
-// utf8_rope::const_reference utf8_rope::at(utf8_rope::size_type idx) const {}
+	while (true) {
+		assert(p);
+		if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
+			// std::cout << "found character " << static_cast<char>((*s)[idx])
+			// << '\n';
+			return (*s)[idx];
+		} else if (node::children_t* ch
+		           = std::get_if<node::children_t>(&p->data)) {
+			if (idx >= ch->l_chars) {
+				// std::cout << "(" << idx << " >= " << ch->l_chars << ") R, ";
+				p = ch->right.get();
+				idx -= ch->l_chars;
+			} else {
+				// std::cout << "(" << idx << " < " << ch->l_chars << ") L, ";
+				p = ch->left.get();
+			}
+		}
+	}
+}
+
+utf8_rope::const_reference utf8_rope::operator[](
+    utf8_rope::size_type idx) const noexcept {
+	node* p{tree.get()};
+
+	while (true) {
+		assert(p);
+		if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
+			return (*s)[idx];
+		} else if (node::children_t* ch
+		           = std::get_if<node::children_t>(&p->data)) {
+			if (idx >= ch->l_chars) {
+				p = ch->right.get();
+				idx -= ch->l_chars;
+			} else {
+				p = ch->left.get();
+			}
+		}
+	}
+}
 
 // utf8_rope::iterator utf8_rope::nth(utf8_rope::size_type idx) noexcept {}
 
@@ -197,8 +231,10 @@ std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
 			    fragment_t{std::make_shared<node>(node::leaf)});
 
 			auto& node_ = *fragment.tree;
-			std::get<std::string>(node_.data)
-			    .assign(remaining_contents.substr(0, partition.chars));
+			auto& s = std::get<std::u8string>(node_.data);
+			// s.assign(remaining_contents.substr(0, partition.chars));
+			s.resize(partition.chars);
+			std::memcpy(s.data(), remaining_contents.data(), partition.chars);
 			node_.assign_from(partition);
 
 			fragment.cumulative = cumulative;
@@ -214,7 +250,11 @@ std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
 			    fragment_t{std::make_shared<node>(node::leaf)});
 
 			auto& node_ = *fragment.tree;
-			std::get<std::string>(node_.data).assign(remaining_contents);
+			auto& s = std::get<std::u8string>(node_.data);
+			// s.assign(remaining_contents);
+			s.resize(remaining_contents.size());
+			std::memcpy(s.data(), remaining_contents.data(),
+			            remaining_contents.size());
 			node_.assign_from(partition);
 
 			fragment.cumulative = cumulative;
@@ -265,12 +305,12 @@ std::ostream& operator<<(std::ostream& os, utf8_rope::sizes sz) {
 	return os << '{' << sz.chars << ", " << sz.codepoints << ", " << sz.clusters
 	          << ", " << sz.lines << '}';
 }
-void debug_print_tree_i(const quest::utf8_rope::node* n) {
+void debug_print_tree_i(const utf8_rope::node* n) {
 	if (not n) {
 		std::cout << "nullptr\n";
 		return;
 	} else {
-		std::cout << '{' << n->size_all() << "; ";
+		std::cout << '{' << n->l_sizes() << "; ";
 		kblib::visit2(
 		    n->data,
 		    [](const quest::utf8_rope::node::children_t& ch) {
@@ -278,10 +318,10 @@ void debug_print_tree_i(const quest::utf8_rope::node* n) {
 			    std::cout << "; ";
 			    debug_print_tree_i(ch.right.get());
 		    },
-		    [](const std::string& s) {
-			    std::cout << s.size()
-			              << std::quoted(s.substr(0, std::min(s.size(), 16uz)))
-			              << "...";
+		    [](const std::u8string& s) {
+			    auto sv = std::string_view(reinterpret_cast<const char*>(s.data()),
+			                               std::min(s.size(), 16uz));
+			    std::cout << s.size() << std::quoted(sv) << "...";
 		    });
 		std::cout << "}\n";
 	}
