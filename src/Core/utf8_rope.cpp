@@ -11,8 +11,10 @@
 #include <deque>
 
 namespace quest {
+using namespace std::literals;
 
-utf8_rope::utf8_rope(std::string_view str) {}
+utf8_rope::utf8_rope(std::string_view str)
+    : tree(node::allocate_subtree(str, 0)){};
 
 utf8_rope::utf8_rope(std::u8string_view str)
     : utf8_rope(std::string_view(reinterpret_cast<const char*>(str.data()),
@@ -98,9 +100,9 @@ void utf8_rope::push_front(char8_t val) {}
 
 void utf8_rope::push_back(char8_t val) {}
 
-void utf8_rope::pop_front() noexcept {}
+void utf8_rope::pop_front() {}
 
-void utf8_rope::pop_back() noexcept {}
+void utf8_rope::pop_back() {}
 
 // utf8_rope::reference utf8_rope::at(utf8_rope::size_type idx) {}
 
@@ -114,8 +116,62 @@ void utf8_rope::pop_back() noexcept {}
 // utf8_rope::size_type utf8_rope::index_of(
 //    utf8_rope::const_iterator it) const noexcept {}
 
-utf8_rope::sizes utf8_rope::find_last_cluster_within(std::string_view str) {
-	return {str.size(), str.size(), str.size(), str.size(), str.size()};
+char32_t pop_code_point(std::string_view& str) {
+	assert(not str.empty());
+	if (str[0] <= 0x7F) {
+		char32_t c = str[0];
+		str.remove_prefix(1);
+		return c;
+	} else {
+		return 0;
+	}
+}
+
+// returns true if a mandatory line break occurs after the first code point in
+// str. str must not be empty
+bool is_newline_after(std::string_view str) {
+	char32_t first = pop_code_point(str);
+
+	// LF, VT, FF, NEL, LINE SEPARATOR, PARAGRAPH SEPARATOR, or CR not followed
+	// by LF
+	return U"\n\v\f\u0085\u2028\u2029"sv.find(first) != std::u32string_view::npos
+	       or (first == U'\r' and (str.empty() or pop_code_point(str) != U'\n'));
+}
+
+utf8_rope::sizes utf8_rope::find_last_cluster_within(
+    const std::string_view str) {
+	utf8_rope::sizes sz{};
+	auto last = str.begin();
+	for (auto it = str.begin(); it != str.end(); ++it) {
+		if (*it <= 0x7F) {
+			++sz.codepoints;
+			++sz.clusters;
+			if (is_newline_after(std::string_view{it, str.end()})) {
+				++sz.lines;
+			}
+			last = it;
+		}
+	}
+	sz.chars = last - str.begin() + 1;
+	// std::cout << "f_l_c_w: " << sz << '\n';
+	assert(sz.validate());
+	return sz;
+}
+
+utf8_rope::sizes count_sizes(const std::string_view str) {
+	utf8_rope::sizes sz{};
+	sz.chars = str.size();
+	for (auto it = str.begin(); it != str.end(); ++it) {
+		if (*it <= 0x7F) {
+			++sz.codepoints;
+			++sz.clusters;
+			if (is_newline_after(std::string_view{it, str.end()})) {
+				++sz.lines;
+			}
+		}
+	}
+	// std::cout << "count_sizes: " << sz << '\n';
+	return sz;
 }
 
 std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
@@ -132,8 +188,9 @@ std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
 			sizes cumulative{};
 		};
 		std::deque<fragment_t> queue;
+		sizes cumulative{};
 
-		while (remaining_length) {
+		while (remaining_length > target_fragment_length) {
 			auto partition = find_last_cluster_within(
 			    remaining_contents.substr(0, target_fragment_length));
 			auto& fragment = queue.emplace_back(
@@ -144,14 +201,89 @@ std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
 			    .assign(remaining_contents.substr(0, partition.chars));
 			node_.assign_from(partition);
 
-			fragment.cumulative += partition;
+			fragment.cumulative = cumulative;
+			cumulative += partition;
+			// std::cout << "a_s1: " << cumulative << '\n';
 
 			remaining_contents.remove_prefix(partition.chars);
 			remaining_length -= partition.chars;
 		}
+		{
+			auto partition = count_sizes(remaining_contents);
+			auto& fragment = queue.emplace_back(
+			    fragment_t{std::make_shared<node>(node::leaf)});
+
+			auto& node_ = *fragment.tree;
+			std::get<std::string>(node_.data).assign(remaining_contents);
+			node_.assign_from(partition);
+
+			fragment.cumulative = cumulative;
+			cumulative += partition;
+			// std::cout << "a_s2: " << cumulative << '\n';
+		}
+
+		//		for (auto& n : queue) {
+		//			std::cout << '[';
+		//			if (n.tree) {
+		//				std::cout << n.tree->size_all() << ',';
+		//			} else {
+		//				std::cout << "nullptr,";
+		//			}
+		//			std::cout << n.cumulative << "]\n";
+		//		}
 
 		// build tree out of segments
-		std::abort();
+		using q_it = decltype(queue)::iterator;
+		auto tree_helper = [](q_it begin, q_it end, sizes offset,
+		                      auto self) -> std::shared_ptr<node> {
+			auto l = end - begin;
+			if (l == 0) {
+				return {};
+			} else if (l == 1) {
+				return std::move(begin->tree);
+			} else {
+				auto midpoint = begin + l / 2;
+				auto sz = midpoint->cumulative - offset;
+				// std::cout << "t_h(" << offset << "): " << sz << '\n';
+				auto n = std::make_shared<node>(node::internal);
+				auto& c = std::get<node::children_t>(n->data);
+				// std::cout << "L:";
+				c.left = self(begin, midpoint, offset, self);
+				// std::cout << "R:";
+				c.right = self(midpoint, end, midpoint->cumulative, self);
+				// n->assign_from(c.left->size_all());
+				n->assign_from(sz);
+				// std::cout << "E\n";
+				return n;
+			}
+		};
+		return tree_helper(queue.begin(), queue.end(), {}, tree_helper);
+	}
+}
+
+std::ostream& operator<<(std::ostream& os, utf8_rope::sizes sz) {
+	return os << '{' << sz.chars << ", " << sz.codepoints << ", " << sz.clusters
+	          << ", " << sz.lines << '}';
+}
+void debug_print_tree_i(const quest::utf8_rope::node* n) {
+	if (not n) {
+		std::cout << "nullptr\n";
+		return;
+	} else {
+		std::cout << '{' << n->size_all() << "; ";
+		kblib::visit2(
+		    n->data,
+		    [](const quest::utf8_rope::node::children_t& ch) {
+			    debug_print_tree_i(ch.left.get());
+			    std::cout << "; ";
+			    debug_print_tree_i(ch.right.get());
+		    },
+		    [](const std::string& s) {
+			    std::cout << s.size()
+			              << std::quoted(s.substr(0, std::min(s.size(), 16uz)))
+			              << "...";
+		    });
+		std::cout << "}\n";
 	}
 }
 

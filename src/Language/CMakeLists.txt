@@ -10,7 +10,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	message("Clang detected")
 
-	add_compile_options(-fcoroutines-ts)
 	add_compile_options(-Wall -Wextra -pedantic -pedantic-errors
 		-Wconversion -Wno-deprecated-declarations -Wuninitialized
 		-Wold-style-cast -Wshadow -Wzero-as-null-pointer-constant
@@ -50,8 +49,8 @@ find_program(REFLEX reflex)
 find_library(LREFLEX reflex)
 target_link_libraries(interpreter PUBLIC
 	"${LREFLEX}"
-	LLVMCore LLVMRemarks LLVMBitstreamReader
-	LLVMBinaryFormat LLVMSupport LLVMDemangle
+#	LLVMCore LLVMRemarks LLVMBitstreamReader
+#	LLVMBinaryFormat LLVMSupport LLVMDemangle
 	rt dl tinfo pthread m
 	"${EXTRA_LIBS}")
 

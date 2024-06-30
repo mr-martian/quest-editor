@@ -19,7 +19,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	message("Clang detected")
 
-	add_compile_options(-fcoroutines-ts)
 	add_compile_options(-Wall -Wextra -pedantic -pedantic-errors
 		-Wconversion -Wno-deprecated-declarations -Wuninitialized
 		-Wold-style-cast -Wshadow -Wzero-as-null-pointer-constant

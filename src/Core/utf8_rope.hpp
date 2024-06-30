@@ -10,6 +10,7 @@
 #define UTF8_ROPE_H
 
 #include <compare>
+#include <iosfwd>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -29,8 +30,6 @@ class utf8_rope_iterator;
 template <typename T>
 concept character = kblib::is_character_v<T>;
 
-template <character T>
-struct grapheme : std::basic_string<T> {};
 template <character T>
 struct grapheme_cluster : std::basic_string<T> {};
 
@@ -58,8 +57,6 @@ class utf8_rope {
 
 	template <character T>
 	utf8_rope(size_type num, T val);
-	template <character T>
-	utf8_rope(size_type num, grapheme<T> val);
 	template <character T>
 	utf8_rope(size_type num, grapheme_cluster<T> val);
 	utf8_rope(char8_t, size_type) = delete;
@@ -155,8 +152,8 @@ class utf8_rope {
 	void push_front(char8_t val);
 	void push_back(char8_t val);
 
-	void pop_front() noexcept;
-	void pop_back() noexcept;
+	void pop_front();
+	void pop_back();
 
 	//	reference operator[](size_type idx) noexcept;
 	//	const_reference operator[](size_type idx) const noexcept;
@@ -171,11 +168,10 @@ class utf8_rope {
 	friend std::ostream& operator<<(std::ostream&, const utf8_rope&);
 
 	struct sizes {
-		size_type chars{}, codepoints{}, graphemes{}, clusters{}, lines{};
+		size_type chars{}, codepoints{}, clusters{}, lines{};
 		sizes operator+=(const sizes& r) noexcept {
 			chars += r.chars;
 			codepoints += r.codepoints;
-			graphemes += r.graphemes;
 			clusters += r.clusters;
 			lines += r.lines;
 			return *this;
@@ -183,11 +179,59 @@ class utf8_rope {
 		friend sizes operator+(sizes l, const sizes& r) noexcept {
 			return l += r;
 		}
-		bool validate() const noexcept {
-			return chars <= codepoints and codepoints <= graphemes
-			       and graphemes <= clusters and clusters <= lines;
+		sizes operator-=(const sizes& r) noexcept {
+			chars -= r.chars;
+			codepoints -= r.codepoints;
+			clusters -= r.clusters;
+			lines -= r.lines;
+			return *this;
 		}
+		friend sizes operator-(sizes l, const sizes& r) noexcept {
+			return l -= r;
+		}
+		bool validate() const noexcept {
+			return chars >= codepoints and codepoints >= clusters
+			       and clusters >= lines;
+		}
+		friend std::ostream& operator<<(std::ostream& os, utf8_rope::sizes sz);
 	};
+
+	size_type size_chars() const noexcept {
+		if (tree) {
+			return tree->size_chars();
+		} else {
+			return {};
+		}
+	}
+	size_type size_codepoints() const noexcept {
+		if (tree) {
+			return tree->size_codepoints();
+		} else {
+			return {};
+		}
+	}
+	size_type size_clusters() const noexcept {
+		if (tree) {
+			return tree->size_clusters();
+		} else {
+			return {};
+		}
+	}
+	size_type size_lines() const noexcept {
+		if (tree) {
+			return tree->size_lines();
+		} else {
+			return {};
+		}
+	}
+	sizes size_all() const noexcept {
+		if (tree) {
+			return tree->size_all();
+		} else {
+			return {};
+		}
+	}
+	size_type size() const noexcept { return size_chars(); }
 
  private:
 	static constexpr size_type target_fragment_length = 4096;
@@ -221,25 +265,25 @@ class utf8_rope {
 
 	 private:
 		std::variant<children_t, std::string> data;
-		size_type l_codepoints{}, l_graphemes{}, l_clusters{}, l_lines{};
-		size_type l_chars() const {
+		size_type l_codepoints{}, l_clusters{}, l_lines{};
+		size_type l_chars() const noexcept {
 			return kblib::visit2(
 			    data, [](const std::string& str) { return str.size(); },
 			    [](const node::children_t& ch) { return ch.l_chars; });
 		}
 
 	 public:
-		sizes size_all() const { return size_all(this); }
-		size_type size_chars() const { return size_chars(this); }
-		size_type size_codepoints() const { return size_codepoints(this); }
-		size_type size_graphemes() const { return size_graphemes(this); }
-		size_type size_clusters() const { return size_clusters(this); }
-		size_type size_lines() const { return size_lines(this); }
+		sizes size_all() const noexcept { return size_all(this); }
+		size_type size_chars() const noexcept { return size_chars(this); }
+		size_type size_codepoints() const noexcept {
+			return size_codepoints(this);
+		}
+		size_type size_clusters() const noexcept { return size_clusters(this); }
+		size_type size_lines() const noexcept { return size_lines(this); }
 
-		static sizes size_all(const node* n) {
+		static sizes size_all(const node* n) noexcept {
 			if (n) {
-				auto l_sizes = sizes{0, n->l_codepoints, n->l_graphemes,
-				                     n->l_clusters, n->l_lines};
+				auto l_sizes = sizes{0, n->l_codepoints, n->l_clusters, n->l_lines};
 				return kblib::visit2(
 				    n->data,
 				    [&l_sizes](const std::string& str) {
@@ -254,7 +298,7 @@ class utf8_rope {
 				return {};
 			}
 		}
-		static size_type size_chars(const node* n) {
+		static size_type size_chars(const node* n) noexcept {
 			if (n) {
 				return kblib::visit2(
 				    n->data, [](const std::string& str) { return str.size(); },
@@ -265,7 +309,7 @@ class utf8_rope {
 				return 0;
 			}
 		}
-		static size_type size_codepoints(const node* n) {
+		static size_type size_codepoints(const node* n) noexcept {
 			if (n) {
 				return kblib::visit2(
 				    n->data, [n](const std::string&) { return n->l_codepoints; },
@@ -276,18 +320,7 @@ class utf8_rope {
 				return 0;
 			}
 		}
-		static size_type size_graphemes(const node* n) {
-			if (n) {
-				return kblib::visit2(
-				    n->data, [n](const std::string&) { return n->l_graphemes; },
-				    [n](const children_t& ch) {
-					    return n->l_graphemes + size_graphemes(ch.right.get());
-				    });
-			} else {
-				return 0;
-			}
-		}
-		static size_type size_clusters(const node* n) {
+		static size_type size_clusters(const node* n) noexcept {
 			if (n) {
 				return kblib::visit2(
 				    n->data, [n](const std::string&) { return n->l_clusters; },
@@ -298,7 +331,7 @@ class utf8_rope {
 				return 0;
 			}
 		}
-		static size_type size_lines(const node* n) {
+		static size_type size_lines(const node* n) noexcept {
 			if (n) {
 				return kblib::visit2(
 				    n->data, [n](const std::string&) { return n->l_lines; },
@@ -310,7 +343,7 @@ class utf8_rope {
 			}
 		}
 
-		[[nodiscard]] bool empty() const {
+		[[nodiscard]] bool empty() const noexcept {
 			return kblib::visit2(
 			    data,
 			    [&](const std::string& str) { //
@@ -324,35 +357,33 @@ class utf8_rope {
 
 	 private:
 		void assign_from(sizes sz) {
-			if (not sz.validate()) {
-				std::abort();
-			}
+			// std::cout << "assign_from: " << sz << '\n';
+			assert(sz.validate());
 
 			kblib::visit2(
-			    data,
-			    [&](std::string& str) {
-				    if (str.size() != sz.chars) {
-					    std::abort();
-				    }
-			    },
+			    data, [&](std::string& str) { assert(str.size() == sz.chars); },
 			    [&](children_t& ch) {
 				    if (sz.chars == 0) {
-					    if (ch.left and not ch.left->empty()) {
-						    std::abort();
-					    }
+					    assert(not ch.left or ch.left->empty());
 				    }
-				    if (not ch.left or ch.left->size_chars() != sz.chars) {
-					    std::abort();
-				    }
+				    assert(ch.left);
+				    assert(ch.left->size_chars() == sz.chars);
+				    ch.l_chars = sz.chars;
 			    });
 
 			l_codepoints = sz.codepoints;
-			l_graphemes = sz.graphemes;
 			l_clusters = sz.clusters;
+			l_lines = sz.lines;
 		}
+		friend void debug_print_tree_i(const quest::utf8_rope::node* n);
 	};
 
 	std::shared_ptr<node> tree;
+
+	friend void debug_print_tree_i(const quest::utf8_rope::node* n);
+
+ public:
+	void debug_print_tree() const { debug_print_tree_i(tree.get()); }
 };
 
 template <typename CharT>
