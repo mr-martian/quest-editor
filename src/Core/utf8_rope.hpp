@@ -442,9 +442,16 @@ class utf8_rope {
 		    = default;
 
 		void recalculate_from_index() {
+			// set up the before_begin iterator
+			if (index == static_cast<std::size_t>(-1)) {
+				fragment = nullptr;
+				fragment_size = 0;
+				fragment_index = 0;
+				return;
+			}
+
 			node* p{root};
 			size_type idx{index};
-
 			while (true) {
 				assert(p);
 				if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
@@ -503,8 +510,15 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 
 	friend utf8_rope_iterator operator+(utf8_rope_iterator it,
 	                                    difference_type d) {
-		it.index += static_cast<std::size_t>(d);
-		it.recalculate_from_index();
+		const auto s = static_cast<difference_type>(it.fragment_size);
+		const auto i = static_cast<difference_type>(it.fragment_index);
+		it.index = static_cast<std::size_t>(static_cast<difference_type>(it.index)
+		                                    + d);
+		if (d < s and d > -s and (0 <= i + d and i + d < s)) {
+			it.fragment_index = static_cast<std::uint16_t>(i + d);
+		} else {
+			it.recalculate_from_index();
+		}
 		return it;
 	}
 	friend difference_type operator-(const utf8_rope_iterator& lhs,
@@ -564,6 +578,12 @@ inline utf8_rope::iterator utf8_rope::begin() noexcept {
 }
 inline utf8_rope::const_iterator utf8_rope::begin() const noexcept {
 	return const_iterator{tree.get(), 0};
+}
+inline utf8_rope::iterator utf8_rope::before_begin() noexcept {
+	return iterator{tree.get(), static_cast<size_type>(-1)};
+}
+inline utf8_rope::const_iterator utf8_rope::before_begin() const noexcept {
+	return const_iterator{tree.get(), static_cast<size_type>(-1)};
 }
 inline utf8_rope::iterator utf8_rope::nth(size_type idx) noexcept {
 	return iterator{tree.get(), idx};
