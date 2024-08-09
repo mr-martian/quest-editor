@@ -12,6 +12,7 @@
 #include <kblib/io.h>
 
 int main(int argc, char** argv) {
+	assert(quest::utf8_rope{}.empty());
 	if (argc == 0) {
 		return 0;
 	}
@@ -58,7 +59,7 @@ int main(int argc, char** argv) {
 			if (--limit >= 0) {
 				std::cout << kblib::escapify(
 				    kblib::concat("index mismatch: file[", i, "] (", file[i],
-				                  ") != *r.nth[", i, "] (", c, ")"))
+				                  ") != *r.nth(", i, ") (", c, ")"))
 				          << '\n';
 			}
 		}
@@ -68,7 +69,27 @@ int main(int argc, char** argv) {
 			if (--limit >= 0) {
 				std::cout << kblib::escapify(
 				    kblib::concat("index mismatch: file[", i, "] (", file[i],
-				                  ") != (*r.begin() + ", i, ") (", c, ")"))
+				                  ") != *(r.begin() + ", i, ") (", c, ")"))
+				          << '\n';
+			}
+		}
+		if (auto c = *(r.before_begin() + static_cast<std::ptrdiff_t>(i + 1));
+		    file[i] != c) {
+			error = true;
+			if (--limit >= 0) {
+				std::cout << kblib::escapify(kblib::concat(
+				    "index mismatch: file[", i, "] (", file[i],
+				    ") != *(r.before_begin() + ", i, " + 1) (", c, ")"))
+				          << '\n';
+			}
+		}
+		if (auto c = *(r.end() - static_cast<std::ptrdiff_t>(file.size() - i));
+		    file[i] != c) {
+			error = true;
+			if (--limit >= 0) {
+				std::cout << kblib::escapify(kblib::concat(
+				    "index mismatch: file[", i, "] (", file[i], ") != *(r.end() - ",
+				    file.size(), " - ", i, ") (", c, ")"))
 				          << '\n';
 			}
 		}
@@ -83,5 +104,18 @@ int main(int argc, char** argv) {
 		}
 		std::cout << "verification failed " << (limit_arg - limit) << " times at "
 		          << discrete_count << " locations\n";
+	}
+
+	assert(r.before_begin() == r.begin() - 1);
+	assert(r.before_begin() == std::prev(r.begin()));
+	assert(r.index_of(r.before_begin()) == static_cast<std::size_t>(-1));
+	assert(r.before_begin() + 1 == r.begin());
+	if (file.empty()) {
+		assert(r.begin() == r.end());
+		assert(r.before_begin() + 1 == r.end());
+	} else {
+		assert(*r.rbegin() == file.back());
+		assert(r.index_of(r.end()) == r.size());
+		assert(r.before_begin()[1] == r.front());
 	}
 }

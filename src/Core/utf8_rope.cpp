@@ -16,21 +16,7 @@ using namespace std::literals;
 utf8_rope::utf8_rope(std::string_view str)
     : tree(node::allocate_subtree(str, 0)){};
 
-utf8_rope::utf8_rope(std::u8string_view str)
-    : utf8_rope(std::string_view(reinterpret_cast<const char*>(str.data()),
-                                 str.size())) {}
-
-utf8_rope::utf8_rope(std::initializer_list<char8_t> il) {}
-
-utf8_rope::utf8_rope(std::initializer_list<char> il) {}
-
-void utf8_rope::assign(std::initializer_list<char8_t> il) {}
-
-void utf8_rope::assign(std::initializer_list<char> il) {}
-
 void utf8_rope::assign(std::string_view str) {}
-
-void utf8_rope::assign(std::u8string_view str) {}
 
 void utf8_rope::assign(utf8_rope::size_type num, char8_t val) {}
 
@@ -59,23 +45,42 @@ utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator begin,
                                      utf8_rope::const_iterator end) {}
 
 // avoids calculating size (and descending the tree twice)
-utf8_rope::reference utf8_rope::back() {
+template <bool check>
+utf8_rope::iterator utf8_rope::end_helper() const noexcept(not check) {
 	node* p{tree.get()};
-	assert(p);
+	size_type sz{};
+	if constexpr (check) {
+		if (not p) {
+			throw std::out_of_range{""};
+		}
+	} else {
+		assert(p);
+	}
 
 	while (true) {
 		assert(p);
 		if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
-			assert(not s->empty());
-			return s->back();
+			if constexpr (check) {
+				if (sz >= s->size()) {
+					throw std::out_of_range{""};
+				}
+			} else {
+				assert(sz < s->size());
+			}
+			sz += s->size();
+			return {tree.get(), sz, s->data(),
+			        static_cast<std::uint16_t>(s->size()),
+			        static_cast<std::uint16_t>(s->size())};
 		} else if (node::children_t* ch
 		           = std::get_if<node::children_t>(&p->data)) {
+			sz += ch->l_chars;
 			p = ch->right.get();
 		}
 	}
 }
 
-utf8_rope::const_reference utf8_rope::back() const {
+template <bool check>
+utf8_rope::reference utf8_rope::back_helper() const noexcept(not check) {
 	node* p{tree.get()};
 	assert(p);
 
@@ -107,6 +112,7 @@ utf8_rope::reference utf8_rope::operator[](utf8_rope::size_type idx) noexcept {
 		if (std::u8string* s = std::get_if<std::u8string>(&p->data)) {
 			// std::cout << "found character " << static_cast<char>((*s)[idx])
 			// << '\n';
+			assert(idx < s->size());
 			return (*s)[idx];
 		} else if (node::children_t* ch
 		           = std::get_if<node::children_t>(&p->data)) {

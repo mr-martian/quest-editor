@@ -48,9 +48,12 @@ class utf8_rope {
 	using size_type = std::size_t;
 	using iterator = utf8_rope_iterator<char8_t>;
 	using const_iterator = utf8_rope_iterator<const char8_t>;
-	//	using reverse_iterator = std::reverse_iterator<iterator>;
-	//	using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+	using reverse_iterator = std::reverse_iterator<iterator>;
+	using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
+	// iterators that work within one fragment (used for for_each_subrange)
+	using local_iterator = std::u8string::iterator;
+	using const_local_iterator = std::u8string::const_iterator;
 	// only iterator and char_iterator can be non-constant
 	using char_iterator = utf8_rope_iterator<char>;
 	using const_char_iterator = utf8_rope_iterator<const char>;
@@ -74,25 +77,47 @@ class utf8_rope {
 	utf8_rope(char, size_type) = delete;
 
 	explicit utf8_rope(std::string_view str);
-	explicit utf8_rope(std::u8string_view str);
+	explicit utf8_rope(std::u8string_view str)
+	    : utf8_rope(std::string_view(reinterpret_cast<const char*>(str.data()),
+	                                 str.size())) {}
 
 	template <typename InputIt, typename Sentinel>
 	utf8_rope(InputIt begin, Sentinel end);
 
-	explicit utf8_rope(std::initializer_list<char8_t> il);
-	explicit utf8_rope(std::initializer_list<char> il);
-	utf8_rope& operator=(std::initializer_list<char8_t> il);
-	utf8_rope& operator=(std::initializer_list<char> il);
+	explicit utf8_rope(std::initializer_list<char8_t> il)
+	    : utf8_rope(std::string_view(reinterpret_cast<const char*>(il.begin()),
+	                                 il.size())) {}
+	explicit utf8_rope(std::initializer_list<char> il)
+	    : utf8_rope(std::string_view(il.begin(), il.size())) {}
+	utf8_rope& operator=(std::initializer_list<char8_t> il) {
+		assign(il);
+		return *this;
+	}
+	utf8_rope& operator=(std::initializer_list<char> il) {
+		assign(il);
+		return *this;
+	}
 
 	template <typename InputIt, typename Sentinel>
 	void assign(InputIt begin, Sentinel end);
-	void assign(std::initializer_list<char8_t> il);
-	void assign(std::initializer_list<char> il);
 
 	void assign(std::string_view str);
-	void assign(std::u8string_view str);
+	void assign(std::u8string_view str) {
+		assign(std::string_view(reinterpret_cast<const char*>(str.data()),
+		                        str.size()));
+	}
+	void assign(std::initializer_list<char8_t> il) {
+		assign(std::string_view(reinterpret_cast<const char*>(il.begin()),
+		                        il.size()));
+	}
+	void assign(std::initializer_list<char> il) {
+		assign(std::string_view(il.begin(), il.size()));
+	}
 
 	void assign(size_type num, char8_t val);
+	void assign(size_type num, char val) {
+		assign(num, static_cast<char8_t>(val));
+	}
 	void assign(char8_t, size_type) = delete;
 	void assign(char, size_type) = delete;
 
@@ -108,31 +133,31 @@ class utf8_rope {
 	const_iterator before_begin() const noexcept;
 	const_iterator cbefore_begin() const noexcept;
 
-	//	reverse_iterator rbegin() noexcept;
-	//	const_reverse_iterator rbegin() const noexcept;
-	//	const_reverse_iterator crbegin() const noexcept;
-	//	reverse_iterator rend() noexcept;
-	//	const_reverse_iterator rend() const noexcept;
-	//	const_reverse_iterator crend() const noexcept;
-	//	iterator rbefore_begin() noexcept;
-	//	const_iterator rbefore_begin() const noexcept;
-	//	const_iterator crbefore_begin() const noexcept;
+	reverse_iterator rbegin() noexcept;
+	const_reverse_iterator rbegin() const noexcept;
+	const_reverse_iterator crbegin() const noexcept;
+	reverse_iterator rend() noexcept;
+	const_reverse_iterator rend() const noexcept;
+	const_reverse_iterator crend() const noexcept;
+	reverse_iterator rbefore_begin() noexcept;
+	const_reverse_iterator rbefore_begin() const noexcept;
+	const_reverse_iterator crbefore_begin() const noexcept;
+
+	// internal iteration avoids some iterator overhead
+	template <typename F>
+	void for_each_subrange(F f) const;
+	template <typename F>
+	void for_each_subrange(F f);
 
 	friend bool operator==(const utf8_rope&, const utf8_rope&);
 	friend std::strong_ordering operator<=>(const utf8_rope&, const utf8_rope&);
 
 	void swap(utf8_rope& other) noexcept { std::swap(tree, other.tree); }
 
-	bool empty() const noexcept { return tree->empty(); }
+	bool empty() const noexcept { return not tree or tree->empty(); }
 
 	static constexpr size_type max_size() { return max_size_; }
 
-	// char8_t will always be a character type, so emplace could only ever have
-	// one argument
-	template <typename... Args>
-	iterator emplace(
-	    const_iterator pos,
-	    Args&&... args) requires std::is_constructible_v<char8_t, Args&&...>;
 	iterator insert(const_iterator pos, char8_t val);
 	iterator insert(const_iterator pos, char val);
 	iterator insert(const_iterator pos, size_type num, char8_t val);
@@ -150,15 +175,15 @@ class utf8_rope {
 	reference front() { return (*this)[0]; }
 	const_reference front() const { return (*this)[0]; }
 
-	reference back();
-	const_reference back() const;
+	reference back() { return back_helper<false>(); }
+	const_reference back() const { return back_helper<false>(); }
 
 	template <typename... Args>
-	void emplace_front(
-	    Args&&... args) requires std::is_constructible_v<char8_t, Args&&...>;
+	void emplace_front(Args&&... args)
+	   requires std::is_constructible_v<char8_t, Args&&...>;
 	template <typename... Args>
-	void emplace_back(
-	    Args&&... args) requires std::is_constructible_v<char8_t, Args&&...>;
+	void emplace_back(Args&&... args)
+	   requires std::is_constructible_v<char8_t, Args&&...>;
 
 	void push_front(char8_t val);
 	void push_back(char8_t val);
@@ -168,22 +193,18 @@ class utf8_rope {
 
 	reference operator[](size_type idx) noexcept;
 	const_reference operator[](size_type idx) const noexcept;
-	reference at(size_type idx) {
-		if (idx > size()) {
-			throw std::out_of_range("");
-		}
-		return (*this)[idx];
-	}
+	reference at(size_type idx) { return at_helper<true>(tree.get(), idx); }
 	const_reference at(size_type idx) const {
-		if (idx > size()) {
-			throw std::out_of_range("");
-		}
-		return (*this)[idx];
+		return at_helper<true>(tree.get(), idx);
 	}
 
 	// slightly less work than begin() + idx
 	iterator nth(size_type idx) noexcept;
 	const_iterator nth(size_type idx) const noexcept;
+
+	code_point_iterator nth_code_point(size_type idx) const noexcept;
+	grapheme_cluster_iterator nth_grapheme_cluster(size_type idx) const noexcept;
+	line_iterator nth_line(size_type idx) const noexcept;
 
 	size_type index_of(iterator it) const noexcept;
 	size_type index_of(const_iterator it) const noexcept;
@@ -254,6 +275,8 @@ class utf8_rope {
 			return {};
 		}
 	}
+	// this is not technically conforming as it is not O(1). It can be changed,
+	// but would add overhead to certain other operations.
 	size_type size() const noexcept { return size_chars(); }
 
  private:
@@ -472,6 +495,15 @@ class utf8_rope {
 			assert(false);
 		}
 	};
+
+	// non-const-correct implementation functions to deduplicate back() and end()
+	template <bool check>
+	reference back_helper() const noexcept(not check);
+	template <bool check>
+	iterator end_helper() const noexcept(not check);
+	template <bool check, typename T>
+	friend auto at_helper(T* tree,
+	                      size_type idx) -> kblib::copy_const_t<T, value_type>&;
 };
 // handles direct (non-transcoded) character iteration
 template <typename CharT>
@@ -494,18 +526,30 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 	utf8_rope_iterator(utf8_rope_iterator&&) = default;
 	utf8_rope_iterator(
 	    const utf8_rope_iterator<std::remove_const_t<CharT>>& o) //
-	    requires std::is_const_v<CharT>
+	   requires std::is_const_v<CharT>
 	    : utf8_rope::iterator_base{
 	          static_cast<const utf8_rope::iterator_base&>(o)} {}
+
+ private:
+	utf8_rope_iterator(utf8_rope::node* n, utf8_rope::size_type idx, char8_t* f,
+	                   std::uint16_t f_size, std::uint16_t f_idx)
+	    : utf8_rope::iterator_base(n, f, idx, f_size, f_idx) {}
+
+ public:
 	utf8_rope_iterator& operator=(const utf8_rope_iterator&) = default;
 	utf8_rope_iterator& operator=(utf8_rope_iterator&&) = default;
 	utf8_rope_iterator& operator=(
-	    const utf8_rope_iterator<std::remove_const_t<CharT>>&
-	        o) requires std::is_const_v<CharT> {
+	    const utf8_rope_iterator<std::remove_const_t<CharT>>& o)
+	   requires std::is_const_v<CharT>
+	{
 		*this = static_cast<const utf8_rope::iterator_base&>(o);
 	}
 
 	reference operator*() const { return fragment[fragment_index]; }
+	// note that CharT should never be a class type, so this can't be used as an
+	// actual operator, but it is still useful to provide a means to extract a
+	// pointer from the iterator
+	pointer operator->() const { return &fragment[fragment_index]; }
 	reference operator[](difference_type d) const { return *(*this + d); }
 
 	friend utf8_rope_iterator operator+(utf8_rope_iterator it,
@@ -564,7 +608,11 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 	friend class utf8_rope;
 	template <typename>
 	friend utf8_rope::size_type index_of(utf8_rope_iterator it) noexcept;
+	template <typename>
+	friend class utf8_rope_iterator;
 };
+
+template class quest::utf8_rope_iterator<char8_t>;
 
 static_assert(std::random_access_iterator<utf8_rope_iterator<char>> //
               and std::output_iterator<utf8_rope_iterator<char>, char>);
@@ -579,10 +627,16 @@ inline utf8_rope::iterator utf8_rope::begin() noexcept {
 inline utf8_rope::const_iterator utf8_rope::begin() const noexcept {
 	return const_iterator{tree.get(), 0};
 }
+inline utf8_rope::const_iterator utf8_rope::cbegin() const noexcept {
+	return const_iterator{tree.get(), 0};
+}
 inline utf8_rope::iterator utf8_rope::before_begin() noexcept {
 	return iterator{tree.get(), static_cast<size_type>(-1)};
 }
 inline utf8_rope::const_iterator utf8_rope::before_begin() const noexcept {
+	return const_iterator{tree.get(), static_cast<size_type>(-1)};
+}
+inline utf8_rope::const_iterator utf8_rope::cbefore_begin() const noexcept {
 	return const_iterator{tree.get(), static_cast<size_type>(-1)};
 }
 inline utf8_rope::iterator utf8_rope::nth(size_type idx) noexcept {
@@ -590,6 +644,15 @@ inline utf8_rope::iterator utf8_rope::nth(size_type idx) noexcept {
 }
 inline utf8_rope::const_iterator utf8_rope::nth(size_type idx) const noexcept {
 	return const_iterator{tree.get(), idx};
+}
+inline utf8_rope::iterator utf8_rope::end() noexcept {
+	return end_helper<false>();
+}
+inline utf8_rope::const_iterator utf8_rope::end() const noexcept {
+	return end_helper<false>();
+}
+inline utf8_rope::const_iterator utf8_rope::cend() const noexcept {
+	return end_helper<false>();
 }
 
 template <typename CharT>
@@ -605,6 +668,152 @@ inline utf8_rope::size_type utf8_rope::index_of(
     utf8_rope::const_iterator it) const noexcept {
 	assert(it.root == tree.get());
 	return it.index;
+}
+
+} // namespace quest
+
+namespace std {
+// the only purpose of this specialization is to avoid frequent unnecessary
+// decrements, because utf8_rope_iterator has a usable before_begin
+template <class CharT>
+class reverse_iterator<quest::utf8_rope_iterator<CharT>> {
+ public:
+	using iterator_type = quest::utf8_rope_iterator<CharT>;
+	using iterator_concept = random_access_iterator_tag;
+	using iterator_category = random_access_iterator_tag;
+	using value_type = iter_value_t<iterator_type>;
+	using difference_type = iter_difference_t<iterator_type>;
+	using pointer = typename iterator_traits<iterator_type>::pointer;
+	using reference = iter_reference_t<iterator_type>;
+
+	constexpr static inline struct raw_construct_tag_t {
+	} raw_construct_tag{};
+
+	constexpr reverse_iterator() = default;
+	constexpr explicit reverse_iterator(iterator_type x)
+	    : current(prev(x)) {}
+	constexpr explicit reverse_iterator(iterator_type x, raw_construct_tag_t)
+	    : current(x) {}
+	template <class U>
+	   requires(not is_same_v<U, iterator_type>)
+	           and convertible_to<const U&, iterator_type>
+	constexpr reverse_iterator(const reverse_iterator<U>& u)
+	    : current(u.current) {}
+	template <class U>
+	   requires(not is_same_v<U, iterator_type>)
+	           and convertible_to<const U&, iterator_type>
+	           and assignable_from<iterator_type&, const U&>
+	constexpr reverse_iterator& operator=(const reverse_iterator<U>& u) {
+		current = u.current;
+	}
+
+	constexpr iterator_type base() const { return next(current); }
+	constexpr iterator_type raw_base() const { return current; }
+	constexpr reference operator*() const { return *current; }
+	constexpr pointer operator->() const { return current.operator->(); }
+	constexpr iterator_type::reference operator[](difference_type n) const {
+		return current[-n];
+	}
+
+	constexpr reverse_iterator& operator++() {
+		--current;
+		return *this;
+	}
+	constexpr reverse_iterator operator++(int) {
+		auto tmp = *this;
+		--current;
+		return tmp;
+	}
+	constexpr reverse_iterator& operator--() {
+		++current;
+		return *this;
+	}
+	constexpr reverse_iterator operator--(int) {
+		auto tmp = *this;
+		++current;
+		return tmp;
+	}
+
+	constexpr reverse_iterator operator+(difference_type n) const {
+		auto tmp = *this;
+		tmp.current -= n;
+		return tmp;
+	}
+	constexpr reverse_iterator& operator+=(difference_type n) {
+		current -= n;
+		return *this;
+	}
+	constexpr reverse_iterator operator-(difference_type n) const {
+		auto tmp = *this;
+		tmp.current += n;
+		return tmp;
+	}
+	constexpr reverse_iterator& operator-=(difference_type n) {
+		current += n;
+		return *this;
+	}
+
+	friend constexpr iter_rvalue_reference_t<iterator_type> iter_move(
+	    const reverse_iterator&
+	        i) noexcept(is_nothrow_copy_constructible_v<iterator_type>
+	                    && noexcept(
+	                        ranges::iter_move(--declval<iterator_type&>()))) {
+		auto tmp = i.current;
+		return ranges::iter_move(tmp);
+	}
+	template <indirectly_swappable<iterator_type> Iterator2>
+	friend constexpr void iter_swap(
+	    const reverse_iterator& x,
+	    const reverse_iterator<Iterator2>&
+	        y) noexcept(is_nothrow_copy_constructible_v<iterator_type>
+	                    && is_nothrow_copy_constructible_v<Iterator2>
+	                    && noexcept(
+	                        ranges::iter_swap(--declval<iterator_type&>(),
+	                                          --declval<Iterator2&>()))) {
+		auto xtmp = x.current;
+		auto ytmp = y.current;
+		ranges::iter_swap(xtmp, ytmp);
+	}
+
+ protected:
+	iterator_type current;
+};
+} // namespace std
+
+namespace quest {
+
+inline utf8_rope::reverse_iterator utf8_rope::rbegin() noexcept {
+	return reverse_iterator(end());
+}
+inline utf8_rope::const_reverse_iterator utf8_rope::rbegin() const noexcept {
+	return const_reverse_iterator(end());
+}
+inline utf8_rope::const_reverse_iterator utf8_rope::crbegin() const noexcept {
+	return const_reverse_iterator(end());
+}
+inline utf8_rope::reverse_iterator utf8_rope::rend() noexcept {
+	return reverse_iterator(before_begin(), reverse_iterator::raw_construct_tag);
+}
+inline utf8_rope::const_reverse_iterator utf8_rope::rend() const noexcept {
+	return const_reverse_iterator(before_begin(),
+	                              const_reverse_iterator::raw_construct_tag);
+}
+inline utf8_rope::const_reverse_iterator utf8_rope::crend() const noexcept {
+	return const_reverse_iterator(before_begin(),
+	                              const_reverse_iterator::raw_construct_tag);
+}
+inline utf8_rope::reverse_iterator utf8_rope::rbefore_begin() noexcept {
+	return reverse_iterator(end(), reverse_iterator::raw_construct_tag);
+}
+inline utf8_rope::const_reverse_iterator utf8_rope::rbefore_begin()
+    const noexcept {
+	return const_reverse_iterator(end(),
+	                              const_reverse_iterator::raw_construct_tag);
+}
+inline utf8_rope::const_reverse_iterator utf8_rope::crbefore_begin()
+    const noexcept {
+	return const_reverse_iterator(end(),
+	                              const_reverse_iterator::raw_construct_tag);
 }
 
 } // namespace quest
