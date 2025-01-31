@@ -45,10 +45,11 @@ add_compile_definitions(
 	"TOKEN_HEADER=<${CMAKE_SOURCE_DIR}/src/Language/token.hpp>"
 	"LEX_HEADER=<$<TARGET_FILE_DIR:interpreter>/lex.yy.h>")
 
-find_program(REFLEX reflex)
-find_library(LREFLEX reflex)
+
+#find_program(REFLEX reflex ${CMAKE_SOURCE_DIR}/build/_deps/)
+
 target_link_libraries(interpreter PUBLIC
-	"${LREFLEX}"
+	reflex
 #	LLVMCore LLVMRemarks LLVMBitstreamReader
 #	LLVMBinaryFormat LLVMSupport LLVMDemangle
 	rt dl tinfo pthread m
@@ -66,9 +67,10 @@ target_include_directories(interpreter
 	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
-add_custom_command(OUTPUT lex.yy.cpp lex.yy.h
-	COMMAND "${REFLEX}" --header-file ${CMAKE_SOURCE_DIR}/src/Language/vellum.l
-	MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/src/Language/vellum.l)
+#add_custom_command(OUTPUT lex.yy.cpp lex.yy.h
+#	COMMAND "${REFLEX}" --header-file ${CMAKE_SOURCE_DIR}/src/Language/vellum.l
+#	MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/src/Language/vellum.l)
+
 target_sources(interpreter PRIVATE vellum.l spec.ebnf precedence.txt)
 #target_sources(interpreter PRIVATE
 #	$<TARGET_FILE_DIR:interpreter>/lex.yy.h

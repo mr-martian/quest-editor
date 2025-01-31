@@ -2,3 +2,5 @@
 *~
 
 **/nppBackup/**
+.vscode/tasks.json
+*.txt#
