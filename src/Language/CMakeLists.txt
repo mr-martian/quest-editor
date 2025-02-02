@@ -46,7 +46,9 @@ add_compile_definitions(
 	"LEX_HEADER=<$<TARGET_FILE_DIR:interpreter>/lex.yy.h>")
 
 
-#find_program(REFLEX reflex ${CMAKE_SOURCE_DIR}/build/_deps/)
+
+find_program(REFLEX_CMD reflex ${reflex_SOURCE_DIR}/bin/win64)
+find_library(LREFLEX reflex ${reflex_SOURCE_DIR}/lib)
 
 target_link_libraries(interpreter PUBLIC
 	reflex
@@ -67,14 +69,14 @@ target_include_directories(interpreter
 	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
-#add_custom_command(OUTPUT lex.yy.cpp lex.yy.h
-#	COMMAND "${REFLEX}" --header-file ${CMAKE_SOURCE_DIR}/src/Language/vellum.l
-#	MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/src/Language/vellum.l)
+add_custom_command(OUTPUT lex.yy.cpp lex.yy.h
+	COMMAND "${REFLEX_CMD}" --header-file ${CMAKE_SOURCE_DIR}/src/Language/vellum.l
+	MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/src/Language/vellum.l)
 
 target_sources(interpreter PRIVATE vellum.l spec.ebnf precedence.txt)
-#target_sources(interpreter PRIVATE
-#	$<TARGET_FILE_DIR:interpreter>/lex.yy.h
-#	$<TARGET_FILE_DIR:interpreter>/lex.yy.cpp)
+target_sources(interpreter PRIVATE
+	$<TARGET_FILE_DIR:interpreter>/lex.yy.h
+	$<TARGET_FILE_DIR:interpreter>/lex.yy.cpp)
 
 source_group(lex REGULAR_EXPRESSION ".*\.l")
 source_group(gen REGULAR_EXPRESSION ".*\.yy\..*")
