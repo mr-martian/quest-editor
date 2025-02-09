@@ -4,8 +4,8 @@
  * (@d-us-vb), Richard (@CodeTriangle)
  * ****************************************************************************/
 
-#include "kblib/io.h"
-#include "kblib/stringops.h"
+#include <kblib/io.h>
+#include <kblib/stringops.h>
 #include <cassert>
 #include <fstream>
 #include <iostream>

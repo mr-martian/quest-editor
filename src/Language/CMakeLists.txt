@@ -33,6 +33,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	message("MSVC detected")
 
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++20 /Zc:__cplusplus")
 	add_compile_options(/W3)
 endif()
 
@@ -45,7 +46,7 @@ add_compile_definitions(
 	"TOKEN_HEADER=<${CMAKE_SOURCE_DIR}/src/Language/token.hpp>"
 	"LEX_HEADER=<$<TARGET_FILE_DIR:interpreter>/lex.yy.h>")
 
-
+target_compile_features(interpreter PUBLIC cxx_std_20)
 
 find_program(REFLEX_CMD reflex ${reflex_SOURCE_DIR}/bin/win64)
 find_library(LREFLEX reflex ${reflex_SOURCE_DIR}/lib)
@@ -61,22 +62,25 @@ add_executable(ast_generator ast_generator.cpp)
 
 # used to add non-installed libraries
 target_include_directories(ast_generator
-	SYSTEM PUBLIC "${EXTRA_INCLUDES}"
-	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+	SYSTEM PUBLIC "${EXTRA_INCLUDES}" "${kblib_SOURCE_DIR}"
+	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} 
 	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(interpreter
-	SYSTEM PUBLIC "${EXTRA_INCLUDES}"
-	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+	SYSTEM PUBLIC "${EXTRA_INCLUDES}" "${kblib_SOURCE_DIR}"
+	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} 
 	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
+  target_compile_features(ast_generator PUBLIC cxx_std_20)
+
+  
 add_custom_command(OUTPUT lex.yy.cpp lex.yy.h
 	COMMAND "${REFLEX_CMD}" --header-file ${CMAKE_SOURCE_DIR}/src/Language/vellum.l
 	MAIN_DEPENDENCY ${CMAKE_SOURCE_DIR}/src/Language/vellum.l)
 
 target_sources(interpreter PRIVATE vellum.l spec.ebnf precedence.txt)
-target_sources(interpreter PRIVATE
-	$<TARGET_FILE_DIR:interpreter>/lex.yy.h
-	$<TARGET_FILE_DIR:interpreter>/lex.yy.cpp)
+# target_sources(interpreter PRIVATE
+# 	$<TARGET_FILE_DIR:interpreter>/lex.yy.h
+# 	$<TARGET_FILE_DIR:interpreter>/lex.yy.cpp)
 
 source_group(lex REGULAR_EXPRESSION ".*\.l")
 source_group(gen REGULAR_EXPRESSION ".*\.yy\..*")

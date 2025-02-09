@@ -29,12 +29,12 @@ FetchContent_Declare(
   GIT_TAG master
 )
 
-# fetch Google-test to avoid conflicts
-FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest
-  GIT_TAG v1.14.0
-)
+# fetch Google-test to avoid conflicts. If commented, ensure that GSL_TEST is set to false.
+# FetchContent_Declare(
+#   googletest
+#   GIT_REPOSITORY https://github.com/google/googletest
+#   GIT_TAG v1.14.0
+#)
 
 FetchContent_Declare(
   GSL
@@ -50,6 +50,8 @@ FetchContent_MakeAvailable(
   TCLAP
   GSL
 )
+
+message(STATUS "Using " ${kblib_SOURCE_DIR} " for kblib")
 
 add_subdirectory(src)
 source_group(TREE "src")

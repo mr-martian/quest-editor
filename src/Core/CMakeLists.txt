@@ -43,7 +43,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
 		-Wno-mismatched-tags -Wimplicit-fallthrough -Wno-pragmas)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 	message("MSVC detected")
-
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++20 /Zc:__cplusplus")
 	add_compile_options(/W3)
 endif()
 
@@ -52,6 +52,6 @@ add_executable(quest-editor
 
 # used to add non-installed libraries
 target_include_directories(quest-editor
-	SYSTEM PUBLIC "${EXTRA_INCLUDES}"
-	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+	SYSTEM PUBLIC "${EXTRA_INCLUDES}" "${kblib_SOURCE_DIR}"
+	INTERFACE ${CMAKE_CURRENT_SOURCE_DIR} 
 	PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
