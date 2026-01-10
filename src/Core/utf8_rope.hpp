@@ -29,15 +29,79 @@ concept character = kblib::is_character_v<T>;
 template <character T>
 struct grapheme_cluster : std::basic_string<T> {};
 
-template <typename CharT>
+template <typename CharT, int Scale = 0>
 class utf8_rope_iterator;
-class utf8_rope_code_point_iterator;
-class utf8_rope_grapheme_cluster_iterator;
-class utf8_rope_line_iterator;
+using utf8_rope_code_point_iterator = utf8_rope_iterator<char32_t, 1>;
+using utf8_rope_grapheme_cluster_iterator
+    = utf8_rope_iterator<grapheme_cluster<char8_t>, 2>;
+using utf8_rope_line_iterator = utf8_rope_iterator<std::u8string, 3>;
 
 // ill-formed:
 // grapheme_cluster<int> t;
 // grapheme_cluster<char> c;
+
+constexpr std::size_t scale_levels = 4;
+using size_tuple = std::array<std::size_t, scale_levels>;
+using aggr_size_tuple = std::array<std::size_t, scale_levels - 1>;
+struct sizes {
+	using size_type = std::size_t;
+	size_type chars{}, codepoints{}, clusters{}, lines{};
+	sizes operator+=(const sizes& r) noexcept {
+		chars += r.chars;
+		codepoints += r.codepoints;
+		clusters += r.clusters;
+		lines += r.lines;
+		return *this;
+	}
+	friend sizes operator+(sizes l, const sizes& r) noexcept { return l += r; }
+	sizes operator-=(const sizes& r) noexcept {
+		chars -= r.chars;
+		codepoints -= r.codepoints;
+		clusters -= r.clusters;
+		lines -= r.lines;
+		return *this;
+	}
+	friend sizes operator-(sizes l, const sizes& r) noexcept { return l -= r; }
+	bool validate() const noexcept {
+		return chars >= codepoints and codepoints >= clusters
+		       and clusters >= lines;
+	}
+	friend std::ostream& operator<<(std::ostream& os, sizes sz);
+
+	static auto as_tuple(sizes sz) -> size_tuple {
+		return {sz.chars, sz.codepoints, sz.clusters, sz.lines};
+	}
+	static auto as_aggr_tuple(sizes sz) -> aggr_size_tuple {
+		return {sz.codepoints, sz.clusters, sz.lines};
+	}
+
+	static auto from_tuple(size_tuple sz) -> sizes {
+		return {sz[0], sz[1], sz[2], sz[3]};
+	}
+
+	static auto from_tuple(size_type chars, aggr_size_tuple sz) -> sizes {
+		return {chars, sz[0], sz[1], sz[2]};
+	}
+};
+
+template <int Scale>
+auto get(sizes sz) {
+	return get<Scale>(sizes::as_tuple(sz));
+}
+template <int Scale>
+auto get(size_tuple sz) {
+	return std::get<Scale>(sz);
+}
+template <int Scale>
+   requires(Scale > 0)
+auto get(aggr_size_tuple sz) {
+	return std::get<Scale - 1>(sz);
+}
+
+namespace detail {
+	template <typename El, int Scale>
+	struct segmentation_traits;
+} // namespace detail
 
 class utf8_rope {
  public:
@@ -206,64 +270,38 @@ class utf8_rope {
 	grapheme_cluster_iterator nth_grapheme_cluster(size_type idx) const noexcept;
 	line_iterator nth_line(size_type idx) const noexcept;
 
+	grapheme_cluster_iterator nth_line_col(size_type line,
+	                                       size_type col) const noexcept;
+
 	size_type index_of(iterator it) const noexcept;
 	size_type index_of(const_iterator it) const noexcept;
 
 	friend std::ostream& operator<<(std::ostream&, const utf8_rope&);
 
-	struct sizes {
-		size_type chars{}, codepoints{}, clusters{}, lines{};
-		sizes operator+=(const sizes& r) noexcept {
-			chars += r.chars;
-			codepoints += r.codepoints;
-			clusters += r.clusters;
-			lines += r.lines;
-			return *this;
-		}
-		friend sizes operator+(sizes l, const sizes& r) noexcept {
-			return l += r;
-		}
-		sizes operator-=(const sizes& r) noexcept {
-			chars -= r.chars;
-			codepoints -= r.codepoints;
-			clusters -= r.clusters;
-			lines -= r.lines;
-			return *this;
-		}
-		friend sizes operator-(sizes l, const sizes& r) noexcept {
-			return l -= r;
-		}
-		bool validate() const noexcept {
-			return chars >= codepoints and codepoints >= clusters
-			       and clusters >= lines;
-		}
-		friend std::ostream& operator<<(std::ostream& os, utf8_rope::sizes sz);
-	};
-
 	size_type size_chars() const noexcept {
 		if (tree) {
-			return tree->size_chars();
+			return tree->size<0>();
 		} else {
 			return {};
 		}
 	}
 	size_type size_codepoints() const noexcept {
 		if (tree) {
-			return tree->size_codepoints();
+			return tree->size<1>();
 		} else {
 			return {};
 		}
 	}
 	size_type size_clusters() const noexcept {
 		if (tree) {
-			return tree->size_clusters();
+			return tree->size<2>();
 		} else {
 			return {};
 		}
 	}
 	size_type size_lines() const noexcept {
 		if (tree) {
-			return tree->size_lines();
+			return tree->size<3>();
 		} else {
 			return {};
 		}
@@ -286,7 +324,7 @@ class utf8_rope {
 
 	static sizes find_last_cluster_within(std::string_view str);
 
-	template <typename CharT>
+	template <typename CharT, int Scale>
 	friend class utf8_rope_iterator;
 
 	class node {
@@ -299,7 +337,7 @@ class utf8_rope {
 		               : std::variant<children_t, std::u8string>{children_t{}}) {}
 		friend class utf8_rope;
 
-		template <typename CharT>
+		template <typename CharT, int Scale>
 		friend class utf8_rope_iterator;
 
 		struct children_t {
@@ -312,7 +350,7 @@ class utf8_rope {
 
 	 private:
 		std::variant<children_t, std::u8string> data;
-		size_type l_codepoints{}, l_clusters{}, l_lines{};
+		aggr_size_tuple l_asizes{};
 		size_type l_chars() const noexcept {
 			return kblib::visit2(
 			    data, [](const std::u8string& str) { return str.size(); },
@@ -322,16 +360,15 @@ class utf8_rope {
 
 	 public:
 		sizes size_all() const noexcept { return size_all(this); }
-		size_type size_chars() const noexcept { return size_chars(this); }
-		size_type size_codepoints() const noexcept {
-			return size_codepoints(this);
+		template <int Scale = -1>
+		size_type size() const noexcept {
+			return size<Scale>(this);
+			// return std::tuple_element_t<Scale, size_calc_tup>::value(this);
 		}
-		size_type size_clusters() const noexcept { return size_clusters(this); }
-		size_type size_lines() const noexcept { return size_lines(this); }
+
 		static sizes l_sizes(const node* n) noexcept {
 			if (n) {
-				return sizes{n->l_chars(), n->l_codepoints, n->l_clusters,
-				             n->l_lines};
+				return sizes::from_tuple(n->l_chars(), n->l_asizes);
 			} else {
 				return {};
 			}
@@ -339,7 +376,7 @@ class utf8_rope {
 
 		static sizes size_all(const node* n) noexcept {
 			if (n) {
-				auto l_sizes = sizes{0, n->l_codepoints, n->l_clusters, n->l_lines};
+				auto l_sizes = sizes::from_tuple(0, n->l_asizes);
 				return kblib::visit2(
 				    n->data,
 				    [&l_sizes](const std::u8string& str) {
@@ -354,46 +391,26 @@ class utf8_rope {
 				return {};
 			}
 		}
-		static size_type size_chars(const node* n) noexcept {
+		template <int Scale>
+		static size_type size(const node* n) noexcept {
 			if (n) {
-				return kblib::visit2(
-				    n->data, [](const std::u8string& str) { return str.size(); },
-				    [](const node::children_t& ch) {
-					    return ch.l_chars + size_chars(ch.right.get());
-				    });
-			} else {
-				return 0;
-			}
-		}
-		static size_type size_codepoints(const node* n) noexcept {
-			if (n) {
-				return kblib::visit2(
-				    n->data, [n](const std::u8string&) { return n->l_codepoints; },
-				    [n](const children_t& ch) {
-					    return n->l_codepoints + size_codepoints(ch.right.get());
-				    });
-			} else {
-				return 0;
-			}
-		}
-		static size_type size_clusters(const node* n) noexcept {
-			if (n) {
-				return kblib::visit2(
-				    n->data, [n](const std::u8string&) { return n->l_clusters; },
-				    [n](const children_t& ch) {
-					    return n->l_clusters + size_clusters(ch.right.get());
-				    });
-			} else {
-				return 0;
-			}
-		}
-		static size_type size_lines(const node* n) noexcept {
-			if (n) {
-				return kblib::visit2(
-				    n->data, [n](const std::u8string&) { return n->l_lines; },
-				    [n](const children_t& ch) {
-					    return n->l_lines + size_lines(ch.right.get());
-				    });
+				if constexpr (Scale == 0) {
+					return kblib::visit2(
+					    n->data, [](const std::u8string& str) { return str.size(); },
+					    [](const node::children_t& ch) {
+						    return ch.l_chars + size<0>(ch.right.get());
+					    });
+				} else {
+					return kblib::visit2(
+					    n->data,
+					    [n](const std::u8string&) {
+						    return get<Scale>(n->l_asizes);
+					    },
+					    [n](const children_t& ch) {
+						    return get<Scale>(n->l_asizes)
+						           + size<Scale>(ch.right.get());
+					    });
+				}
 			} else {
 				return 0;
 			}
@@ -423,13 +440,11 @@ class utf8_rope {
 					    assert(not ch.left or ch.left->empty());
 				    }
 				    assert(ch.left);
-				    assert(ch.left->size_chars() == sz.chars);
+				    assert(ch.left->size<0>() == sz.chars);
 				    ch.l_chars = sz.chars;
 			    });
 
-			l_codepoints = sz.codepoints;
-			l_clusters = sz.clusters;
-			l_lines = sz.lines;
+			l_asizes = sizes::as_aggr_tuple(sz);
 		}
 		friend void debug_print_tree_i(const utf8_rope::node* n);
 	};
@@ -442,8 +457,9 @@ class utf8_rope {
 	void debug_print_tree() const { debug_print_tree_i(tree.get()); }
 
  private:
-	template <typename CharT>
+	template <typename CharT, int Scale>
 	friend class utf8_rope_iterator;
+
 	struct iterator_base {
 		utf8_rope::node* root;
 		char8_t* fragment;
@@ -495,6 +511,8 @@ class utf8_rope {
 			assert(false);
 		}
 	};
+	template <typename El, int Scale>
+	friend struct detail::segmentation_traits;
 
 	// non-const-correct implementation functions to deduplicate back() and end()
 	template <bool check>
@@ -502,20 +520,119 @@ class utf8_rope {
 	template <bool check>
 	iterator end_helper() const noexcept(not check);
 	template <bool check, typename T>
-	friend auto at_helper(T* tree,
-	                      size_type idx) -> kblib::copy_const_t<T, value_type>&;
+	friend auto at_helper(T* tree, size_type idx)
+	    -> kblib::copy_const_t<T, value_type>&;
 };
+
+namespace detail {
+	// char8_t is native, char is practically essential and has aliasing
+	// permissions (required for references)
+	template <typename CharT>
+	   requires std::same_as<std::remove_const_t<CharT>, char8_t>
+	            or std::same_as<std::remove_const_t<CharT>, char>
+	struct segmentation_traits<CharT, 0> {
+		using value_type = CharT;
+		using reference = CharT&;
+		using pointer = CharT*;
+		using const_reference = const CharT&;
+		using const_pointer = const CharT*;
+		// technically, this is a lie, because RA is O(log n) instead of O(1) time
+		using iterator_category = std::random_access_iterator_tag;
+		using iterator_concept = std::random_access_iterator_tag;
+		std::strong_ordering operator<=>(const segmentation_traits&) const
+		    = default;
+
+		static reference deref(const utf8_rope::iterator_base&);
+		static void incr(utf8_rope::iterator_base&);
+		static void decr(utf8_rope::iterator_base&);
+	};
+	// code points can only be accessed via char32_t
+	template <>
+	struct segmentation_traits<char32_t, 1> {
+		using value_type = char32_t;
+		using reference = char32_t;
+		using pointer = void;
+		using const_reference = reference;
+		using const_pointer = pointer;
+		using iterator_category = std::input_iterator_tag;
+		using iterator_concept = std::bidirectional_iterator_tag;
+		std::strong_ordering operator<=>(const segmentation_traits&) const
+		    = default;
+
+		static reference deref(const utf8_rope::iterator_base&);
+		static void incr(utf8_rope::iterator_base&);
+		static void decr(utf8_rope::iterator_base&);
+	};
+	// because these large-scale value_types don't reference the original data at
+	// all, they can use any character type (is this practical? probably not)
+	template <character CharT>
+	struct segmentation_traits<grapheme_cluster<CharT>, 2> {
+		using value_type = grapheme_cluster<CharT>;
+		using reference = value_type;
+		using pointer = void;
+		using const_reference = reference;
+		using const_pointer = pointer;
+		using iterator_category = std::input_iterator_tag;
+		using iterator_concept = std::bidirectional_iterator_tag;
+		std::strong_ordering operator<=>(const segmentation_traits&) const
+		    = default;
+
+		static reference deref(const utf8_rope::iterator_base&);
+		static void incr(utf8_rope::iterator_base&);
+		static void decr(utf8_rope::iterator_base&);
+	};
+	// transcoded iteration might be useful?
+	template <>
+	struct segmentation_traits<grapheme_cluster<char32_t>, 2> {
+		using value_type = grapheme_cluster<char32_t>;
+		using reference = value_type;
+		using pointer = void;
+		using const_reference = reference;
+		using const_pointer = pointer;
+		using iterator_category = std::input_iterator_tag;
+		using iterator_concept = std::bidirectional_iterator_tag;
+		std::strong_ordering operator<=>(const segmentation_traits&) const
+		    = default;
+
+		static reference deref(const utf8_rope::iterator_base&);
+		static void incr(utf8_rope::iterator_base&);
+		static void decr(utf8_rope::iterator_base&);
+	};
+	// same rationale as for grapheme clusters, but transcoding for whole lines
+	// is probably not useful
+	template <character CharT>
+	struct segmentation_traits<std::basic_string<CharT>, 3> {
+		using value_type = std::basic_string<CharT>;
+		using reference = value_type;
+		using pointer = void;
+		using const_reference = reference;
+		using const_pointer = pointer;
+		using iterator_category = std::input_iterator_tag;
+		using iterator_concept = std::bidirectional_iterator_tag;
+		std::strong_ordering operator<=>(const segmentation_traits&) const
+		    = default;
+
+		static reference deref(const utf8_rope::iterator_base&);
+		static void incr(utf8_rope::iterator_base&);
+		static void decr(utf8_rope::iterator_base&);
+	};
+} // namespace detail
+
 // handles direct (non-transcoded) character iteration
-template <typename CharT>
-class utf8_rope_iterator : private utf8_rope::iterator_base {
+// TODO: scaled iterators
+template <typename Element, int Scale>
+class utf8_rope_iterator
+    : private utf8_rope::iterator_base
+    , private detail::segmentation_traits<Element, Scale> {
+	using traits = detail::segmentation_traits<Element, Scale>;
+
  public:
-	using value_type = CharT;
-	using reference = CharT&;
-	using pointer = CharT*;
+	using typename traits::pointer;
+	using typename traits::reference;
+	using typename traits::value_type;
 	using difference_type = std::ptrdiff_t;
-	// technically, this is a lie, because RA is O(log n) instead of O(1) time
-	using iterator_category = std::random_access_iterator_tag;
-	using iterator_concept = std::random_access_iterator_tag;
+	using typename traits::iterator_category;
+	using typename traits::iterator_concept;
 
 	utf8_rope_iterator() = default;
 	utf8_rope_iterator(utf8_rope::node* n, utf8_rope::size_type idx)
@@ -525,8 +642,8 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 	utf8_rope_iterator(const utf8_rope_iterator&) = default;
 	utf8_rope_iterator(utf8_rope_iterator&&) = default;
 	utf8_rope_iterator(
-	    const utf8_rope_iterator<std::remove_const_t<CharT>>& o) //
-	   requires std::is_const_v<CharT>
+	    const utf8_rope_iterator<std::remove_const_t<Element>>& o) //
+	   requires std::is_const_v<Element>
 	    : utf8_rope::iterator_base{
 	          static_cast<const utf8_rope::iterator_base&>(o)} {}
 
@@ -539,17 +656,14 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 	utf8_rope_iterator& operator=(const utf8_rope_iterator&) = default;
 	utf8_rope_iterator& operator=(utf8_rope_iterator&&) = default;
 	utf8_rope_iterator& operator=(
-	    const utf8_rope_iterator<std::remove_const_t<CharT>>& o)
-	   requires std::is_const_v<CharT>
+	    const utf8_rope_iterator<std::remove_const_t<Element>>& o)
+	   requires std::is_const_v<Element>
 	{
 		*this = static_cast<const utf8_rope::iterator_base&>(o);
 	}
 
 	reference operator*() const { return fragment[fragment_index]; }
-	// note that CharT should never be a class type, so this can't be used as an
-	// actual operator, but it is still useful to provide a means to extract a
-	// pointer from the iterator
-	pointer operator->() const { return &fragment[fragment_index]; }
+	pointer operator->() const { return fragment + fragment_index; }
 	reference operator[](difference_type d) const { return *(*this + d); }
 
 	friend utf8_rope_iterator operator+(utf8_rope_iterator it,
@@ -608,7 +722,7 @@ class utf8_rope_iterator : private utf8_rope::iterator_base {
 	friend class utf8_rope;
 	template <typename>
 	friend utf8_rope::size_type index_of(utf8_rope_iterator it) noexcept;
-	template <typename>
+	template <typename, int>
 	friend class utf8_rope_iterator;
 };
 

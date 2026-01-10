@@ -14,35 +14,49 @@ namespace quest {
 using namespace std::literals;
 
 utf8_rope::utf8_rope(std::string_view str)
-    : tree(node::allocate_subtree(str, 0)){};
+    : tree(node::allocate_subtree(str, 0)) {};
 
-void utf8_rope::assign(std::string_view str) {}
+// TODO: rope modifiers
 
-void utf8_rope::assign(utf8_rope::size_type num, char8_t val) {}
+void utf8_rope::assign(std::string_view str) { throw; }
+
+void utf8_rope::assign(utf8_rope::size_type num, char8_t val) { throw; }
 
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos,
-                                      char8_t val) {}
+                                      char8_t val) {
+	throw;
+}
 
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos, char val) {
-
+	throw;
 }
 
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos,
-                                      utf8_rope::size_type num, char8_t val) {}
+                                      utf8_rope::size_type num, char8_t val) {
+	throw;
+}
 
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos,
-                                      utf8_rope::size_type num, char val) {}
+                                      utf8_rope::size_type num, char val) {
+	throw;
+}
 
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos,
-                                      std::initializer_list<char8_t> il) {}
+                                      std::initializer_list<char8_t> il) {
+	throw;
+}
 
 utf8_rope::iterator utf8_rope::insert(utf8_rope::const_iterator pos,
-                                      std::initializer_list<char> il) {}
+                                      std::initializer_list<char> il) {
+	throw;
+}
 
-utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator pos) {}
+utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator pos) { throw; }
 
 utf8_rope::iterator utf8_rope::erase(utf8_rope::const_iterator begin,
-                                     utf8_rope::const_iterator end) {}
+                                     utf8_rope::const_iterator end) {
+	throw;
+}
 
 // avoids calculating size (and descending the tree twice)
 template <bool check>
@@ -51,6 +65,7 @@ utf8_rope::iterator utf8_rope::end_helper() const noexcept(not check) {
 	size_type sz{};
 	if constexpr (check) {
 		if (not p) {
+			// TODO: message
 			throw std::out_of_range{""};
 		}
 	} else {
@@ -78,11 +93,21 @@ utf8_rope::iterator utf8_rope::end_helper() const noexcept(not check) {
 		}
 	}
 }
+template utf8_rope::iterator utf8_rope::end_helper<false>() const noexcept;
+template utf8_rope::iterator utf8_rope::end_helper<true>() const
+    noexcept(false);
 
 template <bool check>
 utf8_rope::reference utf8_rope::back_helper() const noexcept(not check) {
 	node* p{tree.get()};
-	assert(p);
+	if constexpr (check) {
+		if (not p) {
+			// TODO: message
+			throw std::out_of_range{""};
+		}
+	} else {
+		assert(p);
+	}
 
 	while (true) {
 		assert(p);
@@ -96,6 +121,7 @@ utf8_rope::reference utf8_rope::back_helper() const noexcept(not check) {
 	}
 }
 
+// TODO: rope modifiers
 void utf8_rope::push_front(char8_t val) {}
 
 void utf8_rope::push_back(char8_t val) {}
@@ -148,14 +174,6 @@ utf8_rope::const_reference utf8_rope::operator[](
 	}
 }
 
-// utf8_rope::iterator utf8_rope::nth(utf8_rope::size_type idx) noexcept {}
-
-// utf8_rope::const_iterator utf8_rope::nth(
-//    utf8_rope::size_type idx) const noexcept {}
-
-// utf8_rope::size_type utf8_rope::index_of(
-//    utf8_rope::const_iterator it) const noexcept {}
-
 char32_t pop_code_point(std::string_view& str) {
 	assert(not str.empty());
 	if (not (str[0] & 0x80)) {
@@ -163,6 +181,7 @@ char32_t pop_code_point(std::string_view& str) {
 		str.remove_prefix(1);
 		return c;
 	} else {
+		// TODO: unicode
 		return 0;
 	}
 }
@@ -178,11 +197,11 @@ bool is_newline_after(std::string_view str) {
 	       or (first == U'\r' and (str.empty() or pop_code_point(str) != U'\n'));
 }
 
-utf8_rope::sizes utf8_rope::find_last_cluster_within(
-    const std::string_view str) {
-	utf8_rope::sizes sz{};
+sizes utf8_rope::find_last_cluster_within(const std::string_view str) {
+	sizes sz{};
 	auto last = str.begin();
 	for (auto it = str.begin(); it != str.end(); ++it) {
+		// TODO: unicode
 		if (not (*it & 0x80)) {
 			++sz.codepoints;
 			++sz.clusters;
@@ -198,12 +217,14 @@ utf8_rope::sizes utf8_rope::find_last_cluster_within(
 	return sz;
 }
 
-utf8_rope::sizes count_sizes(const std::string_view str) {
-	utf8_rope::sizes sz{};
+sizes count_sizes(const std::string_view str) {
+	sizes sz{};
 	sz.chars = str.size();
 	for (auto it = str.begin(); it != str.end(); ++it) {
+		// TODO: unicode
 		if (not (*it & 0x80)) {
 			++sz.codepoints;
+			// TODO: add cluster detection
 			++sz.clusters;
 			if (is_newline_after(std::string_view{it, str.end()})) {
 				++sz.lines;
@@ -307,7 +328,7 @@ std::shared_ptr<utf8_rope::node> utf8_rope::node::allocate_subtree(
 	}
 }
 
-std::ostream& operator<<(std::ostream& os, utf8_rope::sizes sz) {
+std::ostream& operator<<(std::ostream& os, sizes sz) {
 	return os << '{' << sz.chars << ", " << sz.codepoints << ", " << sz.clusters
 	          << ", " << sz.lines << '}';
 }
