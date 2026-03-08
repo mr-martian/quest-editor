@@ -426,8 +426,7 @@ class Signature : virtual public Node {
 	std::ostream& pretty_print(std::ostream& os) const override;
 
 	// Should be the '(' token that begins the argument list
-	explicit Signature(Token&& t)
-	    : Node(std::move(t)) {}
+	explicit Signature(Token&& t);
 };
 
 struct Discriminators {
@@ -1289,9 +1288,8 @@ class Scope {
 	std::ostream& pretty_print(std::ostream& os) const;
 
 	template <std::derived_from<Declaration> T>
-	iterator add_name(T* ent) requires requires {
-		std::get<T*>(std::declval<entity&>().decl);
-	}
+	iterator add_name(T* ent)
+	   requires requires { std::get<T*>(std::declval<entity&>().decl); }
 	{
 		auto [i, n] = do_add_name(ent);
 		assert(n);

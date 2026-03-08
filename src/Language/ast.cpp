@@ -208,6 +208,9 @@ std::ostream& Signature::pretty_print(std::ostream& os) const {
 	return os << "))";
 }
 
+Signature::Signature(Token&& t)
+   : Node(std::move(t)) {}
+
 std::ostream& ArrayPrefixExpr::pretty_print(std::ostream& os) const {
 	os << "(Array [";
 	auto first = true;

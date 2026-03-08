@@ -5,9 +5,9 @@
  * ****************************************************************************/
 
 #include "ast.hpp"
+#include "lex.yy.h"
 #include <iomanip>
 #include <ostream>
-#include LEX_HEADER
 
 namespace AST {
 
@@ -614,7 +614,8 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope,
 	}
 	parse_qualified_name(tk, scope, decl->_name);
 	// reparent name to scope
-	{}
+	{
+	}
 	if (auto old_decl = scope.find_name(decl->_name)) {
 		if (auto p_old_func = std::get_if<FunctionDef*>(&old_decl->second.decl);
 		    p_old_func and *p_old_func) {

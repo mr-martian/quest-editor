@@ -14,8 +14,12 @@
 %option freespace
 
 %top{
-#include TOKEN_HEADER
+#include "token.hpp"
 //#include <coroutine>
+
+// asyncpp does not include all necessary standard headers
+#include <exception>
+
 #include <asyncpp/generator.h>
 
 // clang-format off
