@@ -11,10 +11,10 @@
 
 namespace AST {
 
+auto parse_attr_name(tokenizer& tk, const Scope& scope) -> NameExpr;
+
 auto parse_attr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
-	Name name;
-	auto ret = make_unique<Attribute>(parse_qualified_name(tk, scope, name));
-	ret->_attr = std::move(name);
+	auto ret = make_unique<Attribute>(parse_attr_name(tk, scope));
 
 	if (tk.gettok_if(Token::punct_lparen)) {
 		ret->_args.emplace();
@@ -44,6 +44,10 @@ auto parse_attr_seq(tokenizer& tk, Scope& scope,
                     std::initializer_list<Token::Type>)
     -> vector<unique_ptr<Node>> {
 	if (tk.gettok_if(Token::punct_attr)) {
+		// doing this explicitly is kind of ugly but it's better than polluting
+		// this code with all the change_to_identifier() calls it would otherwise
+		// need
+		tk.begin_attribute();
 		vector<unique_ptr<Node>> ret;
 		auto attr = parse_attr(tk, scope);
 		do {
@@ -51,6 +55,7 @@ auto parse_attr_seq(tokenizer& tk, Scope& scope,
 		} while (tk.gettok_if(Token::punct_comma)
 		         and (attr = parse_attr(tk, scope)));
 		tk.expect(Token::punct_rbrck);
+		tk.end_attribute();
 		return ret;
 	} else {
 		return {};
@@ -102,6 +107,34 @@ auto parse_qualified_name(tokenizer& tk, const Scope& scope, Name& name)
 	} catch (unexpected& e) {
 		return std::move(e).found;
 	}
+}
+/* attr-name ::=
+ *		  [ '::' ] { namespace-id '::' } identifier [ '!' integer-literal ]
+ *******************************************************************************
+ * attribute names are identifiers even if in other contexts identical tokens
+ *	would be keywords or operators.
+ */
+auto parse_attr_name(tokenizer& tk, const Scope& scope) -> NameExpr {
+	Name name;
+	Token basename;
+	if (not tk.gettok_if(Token::punct_scope)
+	    and tok_classify(tk.peek().type) != token_class::keyword) {
+		name._discrim.scope = scope.name._discrim.scope;
+	}
+	if (tk.gettok_if(Token::punct_scope)) {
+		name._discrim.scope.emplace_back();
+	}
+	basename = tk.expect(Token::identifier, "attr-name");
+	while (tk.gettok_if(Token::punct_scope)) {
+		name._discrim.scope.push_back(std::move(basename).str);
+		basename = tk.expect(Token::identifier, "attr-name");
+	}
+	name._basename = basename.str;
+	if (tk.gettok_if(Token::punct_bang)) {
+		auto args = tk.expect(Token::literal_int);
+		name._discrim.args = kblib::parse_integer<Integer>(args.str);
+	}
+	return NameExpr{std::move(basename), name};
 }
 
 auto parse_tl_decl(tokenizer& tk, Scope& scope, const Declaration& context,
@@ -650,7 +683,7 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope,
 	if (not tk.gettok_if(Token::punct_semi)) {
 		switch (tk.peek().type) {
 		case Token::punct_lbrace: {
-			decl->_body = parse_block(tk, scope);
+			decl->_body = parse_block(tk, local_scope);
 		} break;
 		case Token::kw_substrate:
 		case Token::punct_substr_b: {

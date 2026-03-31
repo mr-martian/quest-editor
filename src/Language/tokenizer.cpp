@@ -10,6 +10,8 @@
 #include <kblib/convert.h>
 #include <kblib/simple.h>
 
+#include "lex.attr.h"
+
 #include <istream>
 
 std::string tok_name(Token::Type t) {
@@ -317,6 +319,9 @@ std::string tok_name(Token::Type t) {
 
 	case Token::identifier:
 		return "identifier \"\x1B\"";
+
+	case Token::comment:
+		return "comment \"\x1B\"";
 	}
 }
 
@@ -354,9 +359,8 @@ tokenizer::tokenizer(std::istream& in, std::string filename, bool l,
 }
 
 std::optional<Token> tokenizer::gettok_if(const Token::Type t) {
-	if (next.type == t) {
-		advance();
-		return last;
+	if (peek().type == t) {
+		return gettok();
 	} else {
 		return std::nullopt;
 	}
@@ -365,27 +369,25 @@ Token tokenizer::expect(const Token::Type t) {
 	if (auto n = gettok_if(t)) {
 		return *std::move(n);
 	} else {
-		throw unexpected(next, tok_name(Token{t, "", {}}));
+		throw unexpected(peek(), tok_name(Token{t, "", {}}));
 	}
 }
 Token tokenizer::expect(const Token::Type t, std::string expected_label) {
 	if (auto n = gettok_if(t)) {
 		return *std::move(n);
 	} else {
-		throw unexpected(next, expected_label);
+		throw unexpected(peek(), expected_label);
 	}
 }
 
 Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
 	if (std::any_of(ts.begin(), ts.end(),
-	                [&](const auto& t) { return t == next.type; })) {
+	                [&](const auto& t) { return t == peek().type; })) {
 		return gettok();
 	} else {
 		std::vector<std::string> expected_names(ts.size());
 		std::transform(begin(ts), end(ts), begin(expected_names),
-		               [](Token::Type t) {
-			               return tok_name(Token{t, "", {}});
-		               });
+		               [](Token::Type t) { return tok_name(Token{t, "", {}}); });
 		auto expected = kblib::join(expected_names, ", or ");
 		throw unexpected(last, expected);
 	}
@@ -394,7 +396,7 @@ Token tokenizer::expect(std::initializer_list<Token::Type> ts) {
 Token tokenizer::expect(std::initializer_list<Token::Type> ts,
                         std::string expected_label) {
 	if (std::any_of(ts.begin(), ts.end(),
-	                [&](const auto& t) { return t == next.type; })) {
+	                [&](const auto& t) { return t == peek().type; })) {
 		return gettok();
 	} else {
 		throw unexpected(last, expected_label);
@@ -402,7 +404,7 @@ Token tokenizer::expect(std::initializer_list<Token::Type> ts,
 }
 
 tokenizer& tokenizer::ignore(const Token::Type t) {
-	if (t != Token::eof and next.type == t) {
+	if (t != Token::eof and peek().type == t) {
 		advance();
 	}
 	return *this;
@@ -431,4 +433,15 @@ void tokenizer::advance() {
 		}
 	}
 	return;
+}
+
+Token change_to_identifier(Token tok) {
+	static AttrLexer attr_lexer;
+	attr_lexer.in(tok.str);
+	auto v = attr_lexer.attrlex();
+
+	if (v.type == Token::identifier) {
+		tok.type = Token::identifier;
+	}
+	return tok;
 }

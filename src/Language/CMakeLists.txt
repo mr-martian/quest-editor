@@ -43,6 +43,15 @@ add_custom_command(
 	VERBATIM
 )
 
+add_custom_command(
+	OUTPUT lex.attr.cpp lex.attr.h
+	COMMAND "${REFLEX}" --prefix=attr --header-file
+		--lexer=AttrLexer "${CMAKE_CURRENT_SOURCE_DIR}/attr.l"
+	MAIN_DEPENDENCY attr.l
+	DEPENDS "${REFLEX}" token.hpp
+	VERBATIM
+)
+
 add_executable(ast_generator)
 target_sources(ast_generator PRIVATE ast_generator.cpp)
 target_include_directories(ast_generator PUBLIC "${EXTRA_INCLUDES}")
@@ -50,8 +59,9 @@ target_include_directories(ast_generator PUBLIC "${EXTRA_INCLUDES}")
 add_library(lexer OBJECT)
 target_sources(lexer
 	PRIVATE
-		vellum.l
+		vellum.l attr.l
 		${CMAKE_CURRENT_BINARY_DIR}/lex.yy.cpp
+		${CMAKE_CURRENT_BINARY_DIR}/lex.attr.cpp
 	PUBLIC
 		FILE_SET HEADERS
 		FILES
@@ -63,6 +73,7 @@ target_sources(lexer
 			${CMAKE_CURRENT_BINARY_DIR}
 		FILES
 			${CMAKE_CURRENT_BINARY_DIR}/lex.yy.h
+			${CMAKE_CURRENT_BINARY_DIR}/lex.attr.h
 )
 target_include_directories(lexer PUBLIC "${EXTRA_INCLUDES}")
 

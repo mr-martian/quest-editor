@@ -29,6 +29,8 @@ proc abc(&mut `in`, &mut out) {
 
 // Some example function declarations:
 
+namespace ns {}
+
 fn func1();
 fn func2(arg);
 fn func3() -> None;
@@ -51,7 +53,7 @@ let math = 1 + 2 * 4 / (8 - 16);
 // function declaration
 export fn format_verse_s(count);
 
-#[attr, attr2]
+#[attr(1), attr2]
 namespace ns {
 // redeclaration
 fn func5(arg : i31) -> u32;

@@ -48,25 +48,18 @@
 	_newline_mode = newline_mode;
 %}
 
-WHITESPACE	[[:space:]]+
-ILCOMMENT	"//"([^\n]|\\\n)*\n
-MLCOMMENT	"/*"(.|\n)*?"*/"
-NAME			[[:alpha:]_][[:alnum:]_]*
 UFLT			[0-9]*([0-9]|\.[0-9]|[0-9]\.)[0-9]*([Ee][-+]?[0-9]+)?
+UDEC			0|[1-9][0-9]*
 UOCT			0[Oo][0-7]+
 UHEX			0[Xx][[:xdigit:]]+
 UBIN			0[Bb][01]+
-UDEC			0|[1-9][0-9]*
 UINT			({UOCT}|{UHEX}|{UDEC})([Uu]?|[Uu][Ll]{0,2})
-CHAR			'(\\.|[^\\\n'])*'
-STRING		\"(\\.|\\\r?\n|[^\\\n"])*\"
+literal_int [+-]?({UDEC}|{UHEX}|{UOCT}|{UBIN})[Uu]?
 
-literal_int [+-]?(0[ob])?[0-9]+|0x[[:xdigit:]]+
-digit	[0-9]
+hexfloat		0[[:xdigit:]]p
+literal_float	[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?|{hexfloat}
+
 hex_quad	[[:xdigit:]]{4}
-decimal_int {digit}+
-hexfloat		{digit}
-literal_float	[+-]?({digit}+(\.{digit}*)?|\.{digit}+)([eE][-+]?{digit}+)?|{hexfloat}
 named_UCN	"\\N{"[^"}\n"]+"}"
 UCN	(?x)"\\u"{hex_quad} \
 	| "\\U"{hex_quad}{hex_quad} \
@@ -77,44 +70,32 @@ escape_sequence	{simple_escape}|"\\x"([[:xdigit:]][[:xdigit:]]?|"{"[[:xdigit:]]+
 literal_string (?m)\"([^"\"\\\n"]|{escape_sequence}|{UCN}|(?:\\\n))*\"
 illegal_escape	\\[^?0abfnrtv\"']
 illegal_string (?m)\"([^"\"\\"]|{escape_sequence}|{UCN}|(?:\\\n)|{illegal_escape})*\"
+illegal_int [0-9]\w*
 
 identifier	\p{Letter}[\p{Letter}\d_]*
-operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
-
-%x COMMENT
-%s ATTRIBUTE
+operator	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]
+stropped_identifier [\p{Letter}\d_\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 
 %%
 
 \n		{ if (_newline_mode) { co_yield token(Token::punct_newline); } }
 \p{Space}+	{ }
 
-"`" {identifier} "`"		{
+<*>"`" {stropped_identifier} "`"		{
  co_yield token(Token::identifier, str().substr(1, str().size() - 2));
 }
-"`" {operator_seq} "`"		{
-	co_yield token(Token::identifier, str().substr(1, str().size() - 2));
-}
 
-"/*"	{ start(COMMENT); std::cout << "comment\n"; }
-<COMMENT>{
-"*/"	{ start(INITIAL); }
-[^*]+	{ } // ignore everything in comments
-"*"+[^*/]*	{ } // ignore *s not followed by /
-<<EOF>>	{ lexer_error("Block comment not ended before end of file"); co_return; }
-}
-"//"[^\n]* { std::cout << "comment\n"; }
-
-<ATTRIBUTE>{
-"]"            { co_yield token(Token::punct_rbrck); start(INITIAL); }
-{identifier}	{ co_yield token(Token::identifier); }
-}
+"/*"(.|\n)*?"*/"	{ std::cout << "comment " << std::quoted(text()) << "\n"; }
+"/*"	{ lexer_error("Block comment not ended before end of file"); co_return; }
+"//"[^\n]* { std::cout << "comment " << std::quoted(text()) << "\n"; }
 
 {literal_int}   	{ co_yield token(Token::literal_int, str()); }
 {literal_float} 	{ co_yield token(Token::literal_float, str()); }
 {literal_string}	{ co_yield token(Token::literal_string, str()); }
+{illegal_int}		{ co_yield token(Token::illegal_literal, str()); }
 {illegal_string}	{ co_yield token(Token::illegal_literal, str()); }
 
+<INITIAL>{
 "Bool"   	{ co_yield token(Token::kw_Bool); }
 "Byte"   	{ co_yield token(Token::kw_Byte); }
 "Fail"   	{ co_yield token(Token::kw_Fail); }
@@ -182,6 +163,7 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "until"  	{ co_yield token(Token::kw_until); }
 "while"  	{ co_yield token(Token::kw_while); }
 "yield"  	{ co_yield token(Token::kw_yield); }
+}
 
 ":="	{ co_yield token(Token::op_assign); }
 "+="	{ co_yield token(Token::op_plus_assign); }
@@ -214,7 +196,7 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "::"	{ co_yield token(Token::punct_scope); }
 "!"	{ co_yield token(Token::punct_bang); }
 "$"	{ co_yield token(Token::punct_dollar); }
-"#["	{ co_yield token(Token::punct_attr); start(ATTRIBUTE); }
+"#["	{ co_yield token(Token::punct_attr); }
 "(:"	{ co_yield token(Token::punct_substr_b); }
 ":)"	{ co_yield token(Token::punct_substr_e); }
 
@@ -225,12 +207,14 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "#"	{ co_yield token(Token::op_hash); }
 "|>"	{ co_yield token(Token::op_pipe); }
 
+<INITIAL>{
 "and"	{ co_yield token(Token::op_and); }
 "or"	{ co_yield token(Token::op_or); }
 "not"	{ co_yield token(Token::op_not); }
-"¬"	{ co_yield token(Token::op_not); }
 "mod"	{ co_yield token(Token::op_mod); }
 "xor"	{ co_yield token(Token::op_xor); }
+}
+"¬"	{ co_yield token(Token::op_not); }
 "⊻"	{ co_yield token(Token::op_xor); }
 "+"	{ co_yield token(Token::op_plus); }
 "-"	{ co_yield token(Token::op_minus); }
@@ -258,7 +242,9 @@ operator_seq	[\+\-\*\/\%\=\<\>\&\|\^\?\@\#]+
 "??"	{ co_yield token(Token::op_qmqm); }
 "?"	{ co_yield token(Token::op_qm); }
 
+<*>{
 {identifier}	{ co_yield token(Token::identifier, str()); }
+}
 
 \p{Unicode}		{ co_yield token(Token::unknown, str()); }
 .					{ co_yield token(Token::unknown, str()); }

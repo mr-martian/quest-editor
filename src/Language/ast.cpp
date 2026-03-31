@@ -37,7 +37,7 @@ std::ostream& Node::print_attrs(std::ostream& os) const {
 			}
 			a->pretty_print(os);
 		}
-		os << "]";
+		os << "] ";
 	}
 	return os;
 }
@@ -98,6 +98,7 @@ UnsignedTypeID::UnsignedTypeID(Token&& t)
 
 std::ostream& Prototype::pretty_print(std::ostream& os) const {
 	os << "(Prototype ";
+	print_attrs(os);
 	if (_is_export) {
 		os << "export ";
 	}
@@ -111,7 +112,9 @@ std::ostream& Prototype::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& FunctionDef::pretty_print(std::ostream& os) const {
-	os << "(FunctionDef\n" << nest << indent;
+	os << "(FunctionDef";
+	print_attrs(os);
+	os << '\n' << nest << indent;
 	Prototype::pretty_print(os);
 	if (_body) {
 		os << '\n' << indent << "(body ";
@@ -123,7 +126,9 @@ std::ostream& FunctionDef::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& VarDecl::pretty_print(std::ostream& os) const {
-	os << "(let (";
+	os << "(let ";
+	print_attrs(os);
+	os << "(";
 	if (_is_reference) {
 		os << "&";
 	}
@@ -153,7 +158,9 @@ std::ostream& VarDecl::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& ArgDecl::pretty_print(std::ostream& os) const {
-	os << "(arg (";
+	os << "(arg ";
+	print_attrs(os);
+	os << "(";
 	if (_is_reference) {
 		os << "&";
 	}
@@ -182,7 +189,9 @@ std::ostream& ArgDecl::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& Signature::pretty_print(std::ostream& os) const {
-	os << "(signature (";
+	os << "(signature ";
+	print_attrs(os);
+	os << "(";
 	auto first = true;
 	for (auto& arg : _args) {
 		if (not std::exchange(first, false)) {
@@ -209,10 +218,12 @@ std::ostream& Signature::pretty_print(std::ostream& os) const {
 }
 
 Signature::Signature(Token&& t)
-   : Node(std::move(t)) {}
+    : Node(std::move(t)) {}
 
 std::ostream& ArrayPrefixExpr::pretty_print(std::ostream& os) const {
-	os << "(Array [";
+	os << "(Array ";
+	print_attrs(os);
+	os << "[";
 	auto first = true;
 	for (auto& dim : _args) {
 		if (not std::exchange(first, false)) {
@@ -234,6 +245,7 @@ std::ostream& ArrayPrefixExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& TupleTypeID::pretty_print(std::ostream& os) const {
 	os << "(Tuple ";
+	print_attrs(os);
 	auto first = true;
 	for (auto& type : _member_types) {
 		if (not std::exchange(first, false)) {
@@ -247,6 +259,7 @@ std::ostream& TupleTypeID::pretty_print(std::ostream& os) const {
 
 std::ostream& UnionTypeID::pretty_print(std::ostream& os) const {
 	os << "(Union ";
+	print_attrs(os);
 	auto first = true;
 	for (auto& type : _member_types) {
 		if (not std::exchange(first, false)) {
@@ -272,6 +285,7 @@ std::ostream& ExprList::pretty_print(std::ostream& os) const {
 
 std::ostream& PrefixExpr::pretty_print(std::ostream& os) const {
 	os << "(prefix ";
+	print_attrs(os);
 	assert(_op);
 	_op->pretty_print(os);
 	assert(_operand);
@@ -282,6 +296,7 @@ std::ostream& PrefixExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& PostfixExpr::pretty_print(std::ostream& os) const {
 	os << "(postfix ";
+	print_attrs(os);
 	assert(_op);
 	_op->pretty_print(os);
 	assert(_operand);
@@ -292,6 +307,7 @@ std::ostream& PostfixExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& BinaryExpr::pretty_print(std::ostream& os) const {
 	os << "(infix ";
+	print_attrs(os);
 	assert(_op);
 	_op->pretty_print(os);
 	assert(_left);
@@ -305,7 +321,9 @@ std::ostream& BinaryExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& CallExpr::pretty_print(std::ostream& os) const {
 	assert(_fun);
-	os << "(call\n" << nest << indent;
+	os << "(call ";
+	print_attrs(os);
+	os << "\n" << nest << indent;
 	_fun->pretty_print(os) << '\n';
 	os << indent << "(";
 	auto first = true;
@@ -320,7 +338,9 @@ std::ostream& CallExpr::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& Attribute::pretty_print(std::ostream& os) const {
-	os << "(attribute " << _attr << " ";
+	os << "(attribute ";
+	print_attrs(os);
+	os << _attr << " ";
 	if (_args) {
 		os << '(';
 		auto first = true;
@@ -337,7 +357,9 @@ std::ostream& Attribute::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& Block::pretty_print(std::ostream& os) const {
-	os << "(block {" << nest;
+	os << "(block ";
+	print_attrs(os);
+	os << "{" << nest;
 	for (auto& ex : _expressions) {
 		assert(ex);
 		ex->pretty_print(os << "\n" << indent);
@@ -346,7 +368,9 @@ std::ostream& Block::pretty_print(std::ostream& os) const {
 }
 
 std::ostream& Namespace::pretty_print(std::ostream& os) const {
-	os << "(namespace " << _name << "\n" << nest;
+	os << "(namespace ";
+	print_attrs(os);
+	os << _name << "\n" << nest;
 	for (auto& decl : _declarations) {
 		assert(decl);
 		os << indent;
@@ -368,7 +392,9 @@ std::ostream& Module::pretty_print(std::ostream& os) const {
 	   }
 	   return os << ")\n"sv;
 	   */
-	os << "(module " << _name << '\n' << nest;
+	os << "(module ";
+	print_attrs(os);
+	os << _name << '\n' << nest;
 	for (auto& import : _imports) {
 		os << indent << "(import " << import._name;
 		if (import._is_export) {
@@ -384,6 +410,7 @@ std::ostream& Module::pretty_print(std::ostream& os) const {
 
 std::ostream& LoopExpr::pretty_print(std::ostream& os) const {
 	os << "(loop ";
+	print_attrs(os);
 	write_label(os);
 	os << nest;
 
@@ -398,12 +425,14 @@ std::ostream& LoopExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& LoopConstraint::pretty_print(std::ostream& os) const {
 	os << "(" << (_target ? "while " : "until ");
+	print_attrs(os);
 	_condition->pretty_print(os) << ")";
 	return os;
 }
 
 std::ostream& WhileExpr::pretty_print(std::ostream& os) const {
 	os << "(loop 'while' ";
+	print_attrs(os);
 	write_label(os);
 	os << nest;
 
@@ -417,6 +446,7 @@ std::ostream& WhileExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& DoWhileExpr::pretty_print(std::ostream& os) const {
 	os << "(loop 'do' ";
+	print_attrs(os);
 	write_label(os);
 	os << '\n' << nest << indent;
 
@@ -430,6 +460,7 @@ std::ostream& DoWhileExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& ForLoopExpr::pretty_print(std::ostream& os) const {
 	os << "(loop 'for' ";
+	print_attrs(os);
 	write_label(os);
 	os << '\n' << nest << indent;
 
@@ -443,6 +474,7 @@ std::ostream& ForLoopExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& ForInExpr::pretty_print(std::ostream& os) const {
 	os << "(loop 'for' ";
+	print_attrs(os);
 	write_label(os);
 	os << '\n' << nest << indent;
 
@@ -459,6 +491,7 @@ std::ostream& ForInExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& ForRangeExpr::pretty_print(std::ostream& os) const {
 	os << "(loop 'for' ";
+	print_attrs(os);
 	write_label(os);
 	os << '\n' << nest << indent;
 
@@ -484,6 +517,7 @@ std::ostream& ForRangeExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& GForExpr::pretty_print(std::ostream& os) const {
 	os << "(loop 'for' " << nest;
+	print_attrs(os);
 	write_label(os);
 	os << '\n' << nest << indent;
 
@@ -506,6 +540,7 @@ std::ostream& GForExpr::pretty_print(std::ostream& os) const {
 
 std::ostream& IfExpression::pretty_print(std::ostream& os) const {
 	os << "(if " << (_target ? "'if'" : "'unless'");
+	print_attrs(os);
 	os << '\n' << nest << indent << '(';
 	_condition->pretty_print(os);
 	os << ") (";
@@ -522,6 +557,7 @@ std::ostream& IfExpression::pretty_print(std::ostream& os) const {
 
 std::ostream& InvertedIfExpr::pretty_print(std::ostream& os) const {
 	os << "(trailing-if " << (_target ? "'if'" : "'unless'");
+	print_attrs(os);
 	os << '\n' << nest << indent << '(';
 	_expr->pretty_print(os);
 	os << ") (";

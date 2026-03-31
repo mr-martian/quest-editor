@@ -43,7 +43,7 @@ class tokenizer {
 
 	[[nodiscard]] Token gettok() {
 		advance();
-		return last;
+		return cur();
 	}
 	[[nodiscard]] std::optional<Token> gettok_if(Token::Type t);
 	[[nodiscard]] std::optional<Token> gettok_if(
@@ -55,8 +55,20 @@ class tokenizer {
 	Token expect(std::initializer_list<Token::Type> ts,
 	             std::string expected_label);
 
-	[[nodiscard]] Token peek() { return next; }
-	[[nodiscard]] Token cur() { return last; }
+	[[nodiscard]] Token peek() {
+		if (in_attribute) {
+			return change_to_identifier(next);
+		} else {
+			return next;
+		}
+	}
+	[[nodiscard]] Token cur() {
+		if (in_attribute) {
+			return change_to_identifier(last);
+		} else {
+			return last;
+		}
+	}
 
 	[[nodiscard]] bool check(Token::Type t) noexcept { return next.type == t; }
 	[[nodiscard]] bool check(std::initializer_list<Token::Type> ts) noexcept {
@@ -65,6 +77,15 @@ class tokenizer {
 	[[nodiscard]] bool was(Token::Type t) noexcept { return last.type == t; }
 	[[nodiscard]] bool was(std::initializer_list<Token::Type> ts) noexcept {
 		return std::find(begin(ts), end(ts), last.type) != end(ts);
+	}
+
+	tokenizer& begin_attribute() {
+		in_attribute = true;
+		return *this;
+	}
+	tokenizer& end_attribute() {
+		in_attribute = false;
+		return *this;
 	}
 
 	tokenizer& ignore() {
@@ -94,6 +115,7 @@ class tokenizer {
 
 	Token last{};
 	Token next{};
+	bool in_attribute{};
 
 	void advance();
 
@@ -478,12 +500,19 @@ class NameExpr
 	std::ostream& pretty_print(std::ostream& os) const override {
 		return Name::pretty_print(os);
 	}
+
+	NameExpr(NameExpr&& name)
+	    : Node(std::move(name._tok))
+	    , Name(static_cast<Name&&>(name)) {}
 	explicit NameExpr(Token&& t)
 	    : Node(std::move(t)) {}
+
 	NameExpr(Token&& t, Name n)
 	    : Node(std::move(t))
-
 	    , Name(std::move(n)) {}
+	explicit NameExpr(nullptr_t)
+	    : Node(nullptr)
+	    , Name() {}
 };
 
 class Declaration : virtual public Node {
@@ -1164,15 +1193,17 @@ class FunctionDef : public Prototype {
 
 class Attribute : virtual public Node {
  public:
-	Attribute(Token&& t)
-	    : Node(std::move(t)) {}
+	Attribute(NameExpr&& name)
+	    : Node(name._tok)
+	    , _attr(std::move(name)) {}
 
  protected:
 	Attribute(nullptr_t)
-	    : Node(nullptr) {}
+	    : Node(nullptr)
+	    , _attr(nullptr) {}
 
  public:
-	Name _attr;
+	NameExpr _attr;
 	optional<vector<unique_ptr<Node>>> _args;
 	std::ostream& pretty_print(std::ostream& os) const override;
 };

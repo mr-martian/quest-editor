@@ -7,6 +7,7 @@
 #define TOKEN_HPP
 
 #include <iomanip>
+#include <reflex/matcher.h>
 #include <stdexcept>
 #include <utility>
 
@@ -180,6 +181,8 @@ struct Token {
 
 		identifier,
 
+		comment,
+
 	} type{unknown};
 
 	std::string str;
@@ -211,6 +214,7 @@ enum class token_class {
 	identifier,
 	special,
 	eof,
+	comment,
 };
 constexpr token_class tok_classify(Token::Type t) {
 	auto in_range_i = [](auto v, std::pair<Token::Type, Token::Type> r) {
@@ -236,11 +240,16 @@ constexpr token_class tok_classify(Token::Type t) {
 		return token_class::special;
 	} else if (v == Token::identifier) {
 		return token_class::identifier;
+	} else if (v == Token::comment) {
+		return token_class::comment;
 	} else {
 		return token_class::unknown;
 	}
 	// no return here to ensure warning if not all cases covered
 }
+
+// if the Token represents a textual element, change its type to identifier
+Token change_to_identifier(Token tok);
 
 class unexpected : public std::invalid_argument {
  public:
