@@ -251,17 +251,4 @@ constexpr token_class tok_classify(Token::Type t) {
 // if the Token represents a textual element, change its type to identifier
 Token change_to_identifier(Token tok);
 
-class unexpected : public std::invalid_argument {
- public:
-	Token found;
-	std::string expected;
-
-	static std::string format_str(Token found, std::string expected);
-
-	unexpected(const Token& found, std::string expected)
-	    : std::invalid_argument(format_str(found, expected))
-	    , found(found)
-	    , expected(std::move(expected)) {}
-};
-
 #endif // TOKEN_HPP

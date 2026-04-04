@@ -20,9 +20,10 @@ auto OverloadSet::insert(FunctionDef* f) -> std::size_t {
 	if (l != _members.end()
 	    and (*l)->_name._discrim.args == f->_name._discrim.args) {
 		if ((*l)->_body) {
-			throw 1;
-		} else
+			throw constraint_error(f->_body->_tok, "redefinition of function");
+		} else {
 			return l - members().begin();
+		}
 	}
 	return _members.insert(l, f) - _members.begin();
 }
@@ -93,7 +94,7 @@ auto Scope::refine_name(iterator old, FunctionDef* ent) -> iterator {
 		auto& ov = std::get<OverloadSet>(old._val->second.decl);
 		return {old._val, ov.refine(ent)};
 	} else {
-		throw 0;
+		throw not_implemented_exception("refining already refined name?");
 	}
 }
 

@@ -5,6 +5,7 @@
  * ****************************************************************************/
 
 #include "ast.hpp"
+#include "error.hpp"
 
 namespace AST {
 
@@ -64,6 +65,22 @@ std::ostream& Name::pretty_print(std::ostream& os) const {
 		os << '!' << *_discrim.args;
 	}
 	return os << ")";
+}
+
+std::string Name::formatted() const {
+	std::string ret;
+	for (auto& s : _discrim.scope) {
+		kblib::append(ret, s, "::");
+	}
+	if (must_strop(_basename)) {
+		kblib::append(ret, '`', _basename, '`');
+	} else {
+		kblib::append(ret, _basename);
+	}
+	if (_discrim.args) {
+		kblib::append(ret, '!', *_discrim.args);
+	}
+	return ret;
 }
 
 static const auto reserved_ident_pattern = reflex::Pattern(
@@ -239,7 +256,7 @@ std::ostream& ArrayPrefixExpr::pretty_print(std::ostream& os) const {
 	if (_rhs) {
 		return _rhs->pretty_print(os) << ")";
 	} else {
-		throw 1;
+		throw not_implemented_exception("array without rhs?");
 	}
 }
 

@@ -64,7 +64,7 @@ auto parse_literal(tokenizer& tk, Scope&, std::initializer_list<Token::Type>)
 	case Token::literal_string:
 		return std::make_unique<StringLiteral>(tk.cur());
 	default:
-		throw 1;
+		throw std::invalid_argument("literal is not a literal token");
 	}
 }
 
@@ -103,7 +103,7 @@ auto parse_typeid(tokenizer& tk, Scope& scope,
 	case Token::id_unsigned:
 		return std::make_unique<UnsignedTypeID>(tk.cur());
 	default:
-		throw 1;
+		throw not_implemented_exception("complex typeid");
 	}
 }
 
@@ -300,10 +300,8 @@ auto parse_loop_expr(tokenizer& tk, Scope& scope) -> unique_ptr<Node> {
 		return expr;
 	} break;
 	default:
-		throw 1;
+		throw std::invalid_argument("illegal loop prefix");
 	}
-
-	throw 0;
 }
 /* if-expression ::=
  *		  ('if' | 'unless') condition block ['else' (block | if-expression)]
@@ -341,7 +339,7 @@ auto parse_if_expr2(tokenizer& tk, Scope& scope,
 auto parse_cond_expr(tokenizer& tk, Scope& scope,
                      std::initializer_list<Token::Type> end_tok_types,
                      unique_ptr<Node> left) -> unique_ptr<Node> {
-	throw 0;
+	throw not_implemented_exception("conditional expressions");
 }
 auto parse_block(tokenizer& tk, Scope& scope) -> unique_ptr<Block> {
 	auto list = std::make_unique<Block>(tk.expect(Token::punct_lbrace));
@@ -439,7 +437,7 @@ auto read_bracketed_expr(tokenizer& tk, Scope& scope,
 		case Token::punct_rbrck:
 		case Token::punct_rbrace:
 		case Token::punct_substr_e:
-			throw 1;
+			throw not_implemented_exception("substrate expressions");
 		case Token::punct_lparen:
 			read_bracketed_expr<Token::punct_lparen, Token::punct_rparen>(
 			    tk, scope, end_tok_types, expr);
@@ -760,11 +758,11 @@ unique_ptr<Node> parse_expr(tokenizer& tk, Scope& scope,
                             int bp) {
 	if (std::find(end_tok_types.begin(), end_tok_types.end(), tk.peek().type)
 	    != end_tok_types.end()) {
-		throw 1;
+		throw constraint_error(tk.peek(), "expression cannot be empty");
 	}
 	auto prefix = scope._prefix_parselets.at(tk.peek().type);
 	if (prefix.bp < bp) {
-		throw 1;
+		throw constraint_error(tk.peek(), "expression cannot be empty");
 	}
 	assert(prefix);
 	auto expr = prefix(tk, scope, end_tok_types);

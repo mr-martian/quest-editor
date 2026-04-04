@@ -6,6 +6,7 @@
 
 #include "ast.hpp"
 
+#include "error.hpp"
 #include "reflex/matcher.h"
 #include <kblib/convert.h>
 #include <kblib/simple.h>

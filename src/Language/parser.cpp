@@ -5,6 +5,7 @@
  * ****************************************************************************/
 
 #include "ast.hpp"
+#include "error.hpp"
 #include "lex.yy.h"
 #include <iomanip>
 #include <ostream>
@@ -145,17 +146,17 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope,
                    vector<unique_ptr<Node>>&& attrs) -> unique_ptr<Prototype>;
 auto parse_enum_decl(tokenizer& tk, Scope& scope,
                      vector<unique_ptr<Node>>&& attrs) -> unique_ptr<EnumDecl> {
-	throw 0;
+	throw not_implemented_exception("enum declaration");
 }
 auto parse_struct_decl(tokenizer& tk, Scope& scope,
                        vector<unique_ptr<Node>>&& attrs)
     -> unique_ptr<StructProto> {
-	throw 0;
+	throw not_implemented_exception("struct declaration");
 }
 auto parse_trait_decl(tokenizer& tk, Scope& scope,
                       vector<unique_ptr<Node>>&& attrs)
     -> unique_ptr<TraitDecl> {
-	throw 0;
+	throw not_implemented_exception("trait declaration");
 }
 
 auto parse_module_def(tokenizer& tk, vector<unique_ptr<Node>>&& attrs)
@@ -195,8 +196,8 @@ auto parse_namespace_block(tokenizer& tk, Scope& parent,
 	}
 	if (auto old_name = parent.find_name(decl->_name)) {
 		if (not std::get_if<Namespace*>(&old_name->second.decl)) {
-			// redefinition of name as different type of symbol
-			throw 1;
+			throw constraint_error(
+			    name, "redefinition of name as different type of symbol");
 		}
 	} else {
 		parent.add_name(decl.get());
@@ -312,54 +313,52 @@ auto parse_module_def(tokenizer& tk, vector<unique_ptr<Node>>&& attrs)
 	return root;
 }
 
-/*
+/* TODO: is this dead code?
  *
  */
 auto parse_n_decl(tokenizer& tk, Scope& scope, vector<unique_ptr<Node>>&& attrs)
     -> unique_ptr<Declaration> {
+	unique_ptr<Declaration> decl;
 	switch (tk.peek().type) {
-		unique_ptr<Declaration> decl;
-		switch (tk.peek().type) {
-		case Token::kw_let: {
-			decl = parse_var_decl(tk, scope, std::move(attrs));
-		} break;
-		case Token::kw_alias: {
-			auto alias_tok = tk.gettok();
-			auto name = Name();
-			parse_qualified_name(tk, scope, name);
-			auto alias = make_unique_for_modify<AliasDecl>(
-			    decl, std::move(alias_tok), std::move(name));
-			alias->_attributes = std::move(attrs);
-			// parse alias declaration
-			tk.expect(Token::punct_equal);
-			alias->_type = parse_expr(tk, scope);
-			scope.add_name(alias);
-		} break;
-		case Token::kw_fn:
-		case Token::kw_proc: {
-			decl = parse_fn_decl(tk, scope, std::move(attrs));
-		} break;
-		case Token::kw_enum: {
-			decl = parse_enum_decl(tk, scope, std::move(attrs));
-		} break;
-		case Token::kw_struct: {
-			decl = parse_struct_decl(tk, scope, std::move(attrs));
-		} break;
-		case Token::kw_trait: {
-			decl = parse_trait_decl(tk, scope, std::move(attrs));
-		} break;
-		case Token::kw_extern:
-		case Token::kw_namespace: {
-			throw 1;
-		} break;
-		case Token::kw_import: {
-			throw unexpected(tk.peek(), "declaration");
-		} break;
-		default:
-			throw unexpected(tk.peek(), "declaration");
-		}
-		return decl;
+	case Token::kw_let: {
+		decl = parse_var_decl(tk, scope, std::move(attrs));
+	} break;
+	case Token::kw_alias: {
+		auto alias_tok = tk.gettok();
+		auto name = Name();
+		parse_qualified_name(tk, scope, name);
+		auto alias = make_unique_for_modify<AliasDecl>(decl, std::move(alias_tok),
+		                                               std::move(name));
+		alias->_attributes = std::move(attrs);
+		// parse alias declaration
+		tk.expect(Token::punct_equal);
+		alias->_type = parse_expr(tk, scope);
+		scope.add_name(alias);
+	} break;
+	case Token::kw_fn:
+	case Token::kw_proc: {
+		decl = parse_fn_decl(tk, scope, std::move(attrs));
+	} break;
+	case Token::kw_enum: {
+		decl = parse_enum_decl(tk, scope, std::move(attrs));
+	} break;
+	case Token::kw_struct: {
+		decl = parse_struct_decl(tk, scope, std::move(attrs));
+	} break;
+	case Token::kw_trait: {
+		decl = parse_trait_decl(tk, scope, std::move(attrs));
+	} break;
+	case Token::kw_extern:
+	case Token::kw_namespace: {
+		throw 1;
+	} break;
+	case Token::kw_import: {
+		throw unexpected(tk.peek(), "declaration");
+	} break;
+	default:
+		throw unexpected(tk.peek(), "declaration");
 	}
+	return decl;
 }
 
 /* extern-declaration ::=
@@ -479,7 +478,7 @@ auto parse_var_def(tokenizer& tk, Scope& scope,
 	}
 	// catch 'mut const' or 'const mut'
 	if (is_const and (is_mut or tk.check(Token::kw_mut))) {
-		throw 1;
+		throw constraint_error(tk.peek(), "const mut variable");
 	}
 	tk.expect(Token::identifier);
 	auto decl = std::make_unique<VarDecl>(tk.cur(),
@@ -536,13 +535,13 @@ auto parse_arg_decl(tokenizer& tk, Scope& scope) -> unique_ptr<ArgDecl> {
 	if (tk.gettok_if(Token::kw_const)) {
 		is_const = true;
 	}
-	if (is_mut and is_const) {
-		throw 1;
+	if (is_const and (is_mut or tk.check(Token::kw_mut))) {
+		throw constraint_error(tk.peek(), "const mut variable");
 	}
 	if (tk.gettok_if(Token::punct_dollar)) {
 		is_implicit = true;
 		if (not is_const) {
-			throw 1;
+			throw constraint_error(tk.cur(), "implicit argument must be const?");
 		}
 	}
 	tk.expect(Token::identifier);
@@ -577,9 +576,10 @@ auto parse_argument_list(tokenizer& tk, Scope& scope)
 			tk.expect(Token::punct_comma);
 		}
 		args.emplace_back(parse_arg_decl(tk, scope));
-		// all implicit arguments must be at end
 		if (tail and not args.back()->_is_implicit) {
-			throw 1;
+			throw constraint_error(
+			    args.back()->_tok,
+			    "all implicit arguments must be at end of argument list");
 		}
 		tail = args.back()->_is_implicit;
 	}
@@ -600,7 +600,7 @@ auto parse_signature(tokenizer& tk, Scope& scope) -> unique_ptr<Signature> {
 	if (tk.was(Token::op_bitand)) {
 		decl->_captures.emplace<Signature::ref_tag_t>();
 	} else if (tk.was(Token::punct_lbrace)) {
-		throw 0;
+		throw not_implemented_exception("complex function capture-desc");
 	}
 	decl->_args = parse_argument_list(tk, new_scope);
 	if (tk.gettok_if(Token::punct_rparen)) {
@@ -653,13 +653,14 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope,
 		if (auto p_old_func = std::get_if<FunctionDef*>(&old_decl->second.decl);
 		    p_old_func and *p_old_func) {
 			if ((*p_old_func)->_body) {
-				throw 1;
+				throw constraint_error(decl->_tok, "redefinition of function");
 			}
 		} else if (auto p_old_func
 		           = std::get_if<OverloadSet>(&old_decl->second.decl)) {
-			;
+			throw not_implemented_exception("add function to overload set");
 		} else {
-			throw 0;
+			throw constraint_error(decl->_tok,
+			                       "redefinition as different type of symbol");
 		}
 	}
 
@@ -670,7 +671,9 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope,
 
 	if (auto& a = decl->_name._discrim.args;
 	    a && *a != decl->_signature->_args.size()) {
-		throw 1;
+		throw constraint_error(decl->_name._discrim._tok,
+		                       "explicitly specified discriminator tag must "
+		                       "match length of function arguments");
 	} else if (not a) {
 		a = decl->_signature->_args.size();
 		local_scope.refine_name(t_name, decl.get());
@@ -691,7 +694,7 @@ auto parse_fn_decl(tokenizer& tk, Scope& scope,
 		} break;
 		case Token::punct_equal: {
 			if (tk.check(Token::kw_delete)) {
-				throw 0;
+				throw not_implemented_exception("deleted function");
 			} else {
 				tk.ignore();
 				decl->_body = parse_expr(tk, local_scope);

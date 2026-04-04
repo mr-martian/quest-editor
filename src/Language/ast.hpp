@@ -7,6 +7,7 @@
 #ifndef AST_HPP
 #define AST_HPP
 
+#include "error.hpp"
 #include "lex.yy.h"
 #include "token.hpp"
 
@@ -306,7 +307,7 @@ class OwnerTypeID : public BuiltinTypeID {
 		if (_owned_type) {
 			return _owned_type->pretty_print(os) << ")";
 		} else {
-			throw 1;
+			throw not_implemented_exception("null owner type");
 		}
 	}
 };
@@ -318,7 +319,7 @@ class SharedTypeID : public BuiltinTypeID {
 		if (_owned_type) {
 			return _owned_type->pretty_print(os) << ")";
 		} else {
-			throw 1;
+			throw not_implemented_exception("null shared type");
 		}
 	}
 };
@@ -454,6 +455,7 @@ class Signature : virtual public Node {
 struct Discriminators {
 	vector<string> scope;
 	optional<Integer> args{};
+	Token _tok;
 
 	friend auto operator<=>(const Discriminators&, const Discriminators&)
 	    = default;
@@ -481,6 +483,7 @@ class Name {
 	}
 	static bool must_strop(string id) noexcept;
 	Name without_args() const { return Name{_basename, {_discrim.scope, {}}}; }
+	std::string formatted() const;
 
 	string _basename;
 	Discriminators _discrim;
@@ -593,7 +596,7 @@ class VarDecl : public Declaration {
 	    , _is_const(con)
 	    , _is_reference(ref) {
 		if (_is_mut and _is_const) {
-			throw 1;
+			throw constraint_error(t, "const mut variable");
 		}
 	}
 	explicit VarDecl(Token&& t)
@@ -614,7 +617,7 @@ class VarDecl : public Declaration {
 	    , _is_const(con)
 	    , _is_reference(ref) {
 		if (_is_mut and _is_const) {
-			throw 1;
+			throw constraint_error({}, "const mut variable");
 		}
 	}
 };
@@ -1118,18 +1121,22 @@ class Prototype : public Declaration {
 	    : Node(std::move(t))
 	    , Declaration(nullptr)
 
-	    , _is_proc(_tok.type == Token::kw_proc ? true
-	               : _tok.type == Token::kw_fn ? false
-	                                           : throw 1) {}
+	    , _is_proc(
+	          _tok.type == Token::kw_proc ? true
+	          : _tok.type == Token::kw_fn
+	              ? false
+	              : throw std::invalid_argument("illegal prototype prefix")) {}
 
  protected:
 	Prototype(nullptr_t)
 	    : Node(nullptr)
 	    , Declaration(nullptr)
 
-	    , _is_proc(_tok.type == Token::kw_proc ? true
-	               : _tok.type == Token::kw_fn ? false
-	                                           : throw 1) {}
+	    , _is_proc(
+	          _tok.type == Token::kw_proc ? true
+	          : _tok.type == Token::kw_fn
+	              ? false
+	              : throw std::invalid_argument("illegal prototype prefix")) {}
 };
 
 enum class Protection {
@@ -1343,7 +1350,8 @@ class Scope {
 				assert(std::holds_alternative<std::nullopt_t>(idx));
 				return {{existing, idx}, false};
 			} else {
-				throw 1;
+				throw constraint_error({}, "redefinition of entity "
+				                               + e_name.formatted());
 				return {{existing, std::monostate{}}, false};
 			}
 		} else {

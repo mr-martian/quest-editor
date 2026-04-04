@@ -5,6 +5,7 @@
  * ****************************************************************************/
 
 #include "ast.hpp"
+#include "error.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -39,6 +40,13 @@ int main(int argc, char** argv) try {
 		try {
 			auto ast = AST::parse_module(tk, scope);
 			ast->pretty_print(std::cout);
+		} catch (const not_implemented_exception& e) {
+			std::clog.flush();
+			std::cout.flush();
+
+			std::cerr << "Error at/before: " << tk.peek().loc << ": ";
+			std::cerr << tok_name(tk.peek()) << '\n';
+			throw;
 		} catch (int e) {
 			std::clog.flush();
 			std::cout.flush();
@@ -56,16 +64,25 @@ int main(int argc, char** argv) try {
 	} else {
 		std::cerr << "[Todo]\n";
 	}
-} catch (const unexpected& e) {
+	return 1;
+} catch (const not_implemented_exception& e) {
 	std::clog.flush();
 	std::cout.flush();
 	std::cerr << e.what() << '\n';
+	return 1;
+} catch (const syntax_error& e) {
+	std::clog.flush();
+	std::cout.flush();
+	std::cerr << e.what() << '\n';
+	return 2;
 } catch (const std::exception& e) {
 	std::clog.flush();
 	std::cout.flush();
 	std::cerr << e.what() << '\n';
+	return 3;
 } catch (...) {
 	std::clog.flush();
 	std::cout.flush();
 	std::cerr << "Unknown exception.\n";
+	return 4;
 }

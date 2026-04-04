@@ -82,7 +82,7 @@ target_sources(interpreter
 	PUBLIC
 		FILE_SET HEADERS
 		FILES
-			ast.hpp token.hpp
+			ast.hpp token.hpp error.hpp
 	PRIVATE
 		interpreter.cpp ast.cpp	expressions.cpp parser.cpp scope.cpp
 		tokenizer.cpp
